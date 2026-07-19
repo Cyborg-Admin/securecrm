@@ -455,3 +455,44 @@ CREATE TABLE IF NOT EXISTS event_registrations (
 
 CREATE INDEX IF NOT EXISTS idx_event_regs_event
   ON event_registrations(organization_id, event_id, track);
+
+-- -----------------------------------------------------------------------------
+-- Product catalogue + opportunity line items
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS products (
+  id                TEXT PRIMARY KEY,
+  organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  sku               TEXT,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  category          TEXT,
+  unit_price        REAL NOT NULL DEFAULT 0,
+  currency          TEXT NOT NULL DEFAULT 'GBP',
+  is_active         INTEGER NOT NULL DEFAULT 1,
+  metadata_json     TEXT NOT NULL DEFAULT '{}',
+  created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_org_sku
+  ON products(organization_id, sku)
+  WHERE sku IS NOT NULL AND sku != '';
+CREATE INDEX IF NOT EXISTS idx_products_org_name
+  ON products(organization_id, name);
+
+CREATE TABLE IF NOT EXISTS opportunity_line_items (
+  id                TEXT PRIMARY KEY,
+  organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  opportunity_id    TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  product_id        TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+  quantity          REAL NOT NULL DEFAULT 1,
+  unit_price        REAL NOT NULL DEFAULT 0,
+  discount          REAL NOT NULL DEFAULT 0,
+  line_total        REAL NOT NULL DEFAULT 0,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_opp_lines_opp
+  ON opportunity_line_items(organization_id, opportunity_id);

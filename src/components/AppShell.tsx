@@ -32,6 +32,7 @@ type NavItem = {
     | "leads"
     | "contacts"
     | "company"
+    | "product"
     | "opp"
     | "event"
     | "bolt"
@@ -82,6 +83,13 @@ const NAV_GROUPS: NavGroup[] = [
         icon: "company",
       },
       {
+        href: "/products",
+        label: "Products",
+        perm: "products:read",
+        feature: "products",
+        icon: "product",
+      },
+      {
         href: "/opportunities",
         label: "Opportunities",
         perm: "opportunities:read",
@@ -130,7 +138,8 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/reports": { title: "Reports", subtitle: "Trends across your workspace" },
   "/leads": { title: "Leads", subtitle: "Capture and qualify prospects" },
   "/contacts": { title: "Contacts", subtitle: "People you’re engaging" },
-  "/companies": { title: "Companies", subtitle: "Accounts and domains" },
+  "/companies": { title: "Companies", subtitle: "Accounts and related records" },
+  "/products": { title: "Products", subtitle: "Catalogue of what you sell" },
   "/opportunities": {
     title: "Opportunities",
     subtitle: "Deals linked to companies and contacts",
@@ -504,6 +513,23 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
             stroke="currentColor"
             strokeWidth="1.7"
             strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "product":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 8.5 12 4l8 4.5V16l-8 4.5L4 16V8.5Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M12 12v8.5M4 8.5l8 3.5 8-3.5"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
           />
         </svg>
       );

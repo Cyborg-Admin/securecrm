@@ -508,7 +508,7 @@ export default function SettingsPage() {
       {tab === "features" && org && (
         <div className="neo-raised mt-4 p-5">
           <p className="text-sm text-[var(--neo-muted)]">
-            Toggle which product areas appear for this organization. Permissions still apply.
+            Toggle which areas appear for this organization. Permissions still apply.
           </p>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {FEATURE_KEYS.map((key) => (

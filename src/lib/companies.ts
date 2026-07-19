@@ -153,3 +153,84 @@ export async function upsertCompany(input: {
 
   return { company, created: true };
 }
+
+export async function updateCompany(input: {
+  organizationId: string;
+  actorUserId: string;
+  companyId: string;
+  name?: string;
+  website?: string | null;
+  industry?: string | null;
+  linkedinUrl?: string | null;
+  employeeCount?: string | null;
+  location?: string | null;
+}): Promise<CompanyRow> {
+  const db = await getDbAsync();
+  const existing = await db
+    .prepare<CompanyRow>(
+      `SELECT * FROM companies WHERE id = ? AND organization_id = ?`,
+    )
+    .get(input.companyId, input.organizationId);
+  if (!existing) throw new Error("NOT_FOUND");
+
+  const nextName = input.name?.trim() || existing.name;
+  const nextNormalized = normalizeCompanyName(nextName);
+  if (nextNormalized !== existing.name_normalized) {
+    const clash = await db
+      .prepare(
+        `SELECT id FROM companies
+         WHERE organization_id = ? AND name_normalized = ? AND id != ?`,
+      )
+      .get(input.organizationId, nextNormalized, input.companyId);
+    if (clash) throw new Error("NAME_CONFLICT");
+  }
+
+  const website =
+    input.website !== undefined ? input.website : existing.website;
+  const domain = normalizeDomain(website);
+
+  await db
+    .prepare(
+      `UPDATE companies SET
+         name = ?,
+         name_normalized = ?,
+         website = ?,
+         domain = ?,
+         domain_normalized = ?,
+         industry = COALESCE(?, industry),
+         linkedin_url = COALESCE(?, linkedin_url),
+         employee_count = COALESCE(?, employee_count),
+         location = COALESCE(?, location),
+         updated_at = datetime('now')
+       WHERE id = ? AND organization_id = ?`,
+    )
+    .run(
+      nextName,
+      nextNormalized,
+      website ?? null,
+      domain,
+      domain,
+      input.industry === undefined ? null : input.industry,
+      input.linkedinUrl === undefined ? null : input.linkedinUrl,
+      input.employeeCount === undefined ? null : input.employeeCount,
+      input.location === undefined ? null : input.location,
+      input.companyId,
+      input.organizationId,
+    );
+
+  const company = (await db
+    .prepare<CompanyRow>(`SELECT * FROM companies WHERE id = ?`)
+    .get(input.companyId))!;
+
+  await writeAudit({
+    organizationId: input.organizationId,
+    actorUserId: input.actorUserId,
+    action: "company.updated",
+    entityType: "company",
+    entityId: input.companyId,
+    before: existing,
+    after: company,
+  });
+
+  return company;
+}

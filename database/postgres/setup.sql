@@ -406,3 +406,41 @@ CREATE TABLE IF NOT EXISTS event_registrations (
 
 CREATE INDEX IF NOT EXISTS idx_event_regs_event
   ON event_registrations(organization_id, event_id, track);
+
+CREATE TABLE IF NOT EXISTS products (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  sku               TEXT,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  category          TEXT,
+  unit_price        DOUBLE PRECISION NOT NULL DEFAULT 0,
+  currency          TEXT NOT NULL DEFAULT 'GBP',
+  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
+  metadata_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_org_sku
+  ON products(organization_id, sku)
+  WHERE sku IS NOT NULL AND sku != '';
+CREATE INDEX IF NOT EXISTS idx_products_org_name
+  ON products(organization_id, name);
+
+CREATE TABLE IF NOT EXISTS opportunity_line_items (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  opportunity_id    UUID NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
+  product_id        UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+  quantity          DOUBLE PRECISION NOT NULL DEFAULT 1,
+  unit_price        DOUBLE PRECISION NOT NULL DEFAULT 0,
+  discount          DOUBLE PRECISION NOT NULL DEFAULT 0,
+  line_total        DOUBLE PRECISION NOT NULL DEFAULT 0,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_opp_lines_opp
+  ON opportunity_line_items(organization_id, opportunity_id);

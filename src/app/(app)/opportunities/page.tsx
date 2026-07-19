@@ -23,6 +23,14 @@ type Opp = {
 type Stage = { id: string; name: string; requires_approval: number | boolean };
 type Company = { id: string; name: string };
 type Contact = { id: string; full_name: string };
+type Product = { id: string; name: string; unit_price: number; currency: string };
+type LineItem = {
+  id: string;
+  product_name?: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+};
 
 function OpportunitiesInner() {
   const search = useSearchParams();
@@ -30,6 +38,11 @@ function OpportunitiesInner() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [lineTotal, setLineTotal] = useState(0);
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const [selected, setSelected] = useState<Opp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -40,21 +53,41 @@ function OpportunitiesInner() {
     amount: "",
   });
 
+  async function loadLineItems(opportunityId: string) {
+    const data = await api<{ lineItems: LineItem[]; total: number }>(
+      `/api/opportunities/${opportunityId}/line-items`,
+    );
+    setLineItems(data.lineItems || []);
+    setLineTotal(Number(data.total || 0));
+  }
+
+  async function selectOpp(o: Opp) {
+    setSelected(o);
+    await loadLineItems(o.id).catch(() => {
+      setLineItems([]);
+      setLineTotal(0);
+    });
+  }
+
   async function load() {
-    const [o, s, c, ct] = await Promise.all([
+    const [o, s, c, ct, p] = await Promise.all([
       api<{ opportunities: Opp[] }>("/api/opportunities"),
       api<{ stages: Stage[] }>("/api/pipeline-stages?pipeline=opportunity"),
       api<{ companies: Company[] }>("/api/companies"),
       api<{ contacts: Contact[] }>("/api/contacts"),
+      api<{ products: Product[] }>("/api/products?active=1").catch(() => ({
+        products: [] as Product[],
+      })),
     ]);
     setOpps(o.opportunities);
     setStages(s.stages);
     setCompanies(c.companies || []);
     setContacts(ct.contacts || []);
+    setProducts(p.products || []);
     const openId = search.get("open");
     if (openId) {
       const found = o.opportunities.find((x) => x.id === openId);
-      if (found) setSelected(found);
+      if (found) void selectOpp(found);
     }
   }
 
@@ -103,7 +136,34 @@ function OpportunitiesInner() {
     const fresh = await api<{ opportunity: Opp }>(
       `/api/opportunities/${selected.id}`,
     );
-    setSelected(fresh.opportunity);
+    await selectOpp(fresh.opportunity);
+  }
+
+  async function addLineItem(e: FormEvent) {
+    e.preventDefault();
+    if (!selected || !productId) return;
+    setError(null);
+    try {
+      const res = await api<{ opportunityAmount: number }>(
+        `/api/opportunities/${selected.id}/line-items`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            productId,
+            quantity: quantity ? Number(quantity) : 1,
+          }),
+        },
+      );
+      setProductId("");
+      setQuantity("1");
+      await loadLineItems(selected.id);
+      setSelected((prev) =>
+        prev ? { ...prev, amount: res.opportunityAmount } : prev,
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add product");
+    }
   }
 
   return (
@@ -184,7 +244,7 @@ function OpportunitiesInner() {
                 className={`w-full rounded-2xl p-3 text-left ${
                   selected?.id === o.id ? "neo-pressed" : "neo-inset"
                 }`}
-                onClick={() => setSelected(o)}
+                onClick={() => void selectOpp(o)}
               >
                 <p className="font-medium">{o.name}</p>
                 <p className="text-sm text-[var(--neo-muted)]">
@@ -251,6 +311,53 @@ function OpportunitiesInner() {
                   Approval status: {selected.approval_status}
                 </p>
               )}
+
+              <div className="border-t border-[var(--line)] pt-3">
+                <h3 className="record-section-title">Products sold</h3>
+                <p className="mt-1 text-sm text-[var(--neo-muted)]">
+                  Line total: {selected.currency} {lineTotal.toLocaleString()}
+                </p>
+                <ul className="mt-2 space-y-2 text-sm">
+                  {lineItems.map((li) => (
+                    <li key={li.id} className="record-timeline-item">
+                      <p className="font-medium">{li.product_name}</p>
+                      <p className="text-[var(--neo-muted)]">
+                        {li.quantity} × {li.unit_price} = {li.line_total}
+                      </p>
+                    </li>
+                  ))}
+                  {!lineItems.length ? (
+                    <li className="text-[var(--neo-muted)]">No products yet.</li>
+                  ) : null}
+                </ul>
+                <form onSubmit={addLineItem} className="mt-3 grid gap-2">
+                  <select
+                    className="neo-input"
+                    value={productId}
+                    onChange={(e) => setProductId(e.target.value)}
+                    required
+                  >
+                    <option value="">Add product…</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.currency} {p.unit_price})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="neo-input"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="Quantity"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                  <button className="neo-btn neo-btn-primary" type="submit">
+                    Add line item
+                  </button>
+                </form>
+              </div>
             </div>
           ) : (
             <p className="text-[var(--neo-muted)]">Select an opportunity.</p>

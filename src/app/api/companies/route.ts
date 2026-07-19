@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   let sql = `SELECT c.*,
       (SELECT COUNT(*) FROM leads l WHERE l.company_id = c.id) as lead_count,
-      (SELECT COUNT(*) FROM contacts ct WHERE ct.company_id = c.id) as contact_count
+      (SELECT COUNT(*) FROM contacts ct WHERE ct.company_id = c.id) as contact_count,
+      (SELECT COUNT(*) FROM opportunities o WHERE o.company_id = c.id) as opportunity_count
     FROM companies c WHERE c.organization_id = ?`;
   const params: unknown[] = [user.organization_id];
   if (q) {
