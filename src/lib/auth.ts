@@ -30,84 +30,17 @@ function sessionDays(): number {
   return Number(process.env.SESSION_DAYS || 14);
 }
 
-export async function loginUser(input: {
-  email: string;
-  password: string;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-}): Promise<{ user: AuthUser; sessionToken: string; csrfToken: string } | null> {
-  await bootstrapApp();
-  const db = await getDbAsync();
-  const email = input.email.trim().toLowerCase();
-  const user = await db
-    .prepare<{
-      id: string;
-      organization_id: string;
-      email: string;
-      full_name: string;
-      password_hash: string;
-      is_active: number | boolean;
-    }>(
-      `SELECT id, organization_id, email, full_name, password_hash, is_active
-       FROM users WHERE email = ? LIMIT 1`,
-    )
-    .get(email);
-
-  if (!user || !user.is_active) return null;
-  const ok = bcrypt.compareSync(input.password, user.password_hash);
-  if (!ok) return null;
-
-  const sessionToken = newToken(32);
-  const csrfSecret = newToken(24);
-  const sessionId = newId();
-  const expires = new Date(Date.now() + sessionDays() * 86400000).toISOString();
-
-  await db
-    .prepare(
-      `INSERT INTO sessions
-     (id, user_id, organization_id, token_hash, csrf_secret, expires_at, ip_address, user_agent)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      sessionId,
-      user.id,
-      user.organization_id,
-      hashToken(sessionToken),
-      csrfSecret,
-      expires,
-      input.ipAddress ?? null,
-      input.userAgent ?? null,
-    );
-
-  await db
-    .prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?")
-    .run(user.id);
-
-  await writeAudit({
-    organizationId: user.organization_id,
-    actorUserId: user.id,
-    action: "auth.login",
-    entityType: "user",
-    entityId: user.id,
-    ipAddress: input.ipAddress,
-    userAgent: input.userAgent,
-  });
-
-  const authUser = await loadAuthUser(user.id, sessionId, csrfSecret);
-  if (!authUser) return null;
-  return { user: authUser, sessionToken, csrfToken: csrfSecret };
+export function isUserActive(value: unknown): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "t" ||
+    value === "true"
+  );
 }
 
-export async function logoutSession(sessionToken: string): Promise<void> {
-  const db = await getDbAsync();
-  await db
-    .prepare(
-      "UPDATE sessions SET revoked_at = datetime('now') WHERE token_hash = ?",
-    )
-    .run(hashToken(sessionToken));
-}
-
-async function loadAuthUser(
+export async function loadAuthUser(
   userId: string,
   sessionId: string,
   csrfSecret: string,
@@ -119,12 +52,12 @@ async function loadAuthUser(
       organization_id: string;
       email: string;
       full_name: string;
-      is_active: number | boolean;
+      is_active: number | boolean | string;
     }>(
       `SELECT id, organization_id, email, full_name, is_active FROM users WHERE id = ?`,
     )
     .get(userId);
-  if (!user || !user.is_active) return null;
+  if (!user || !isUserActive(user.is_active)) return null;
 
   const roles = (
     await db
@@ -157,6 +90,102 @@ async function loadAuthUser(
     session_id: sessionId,
     csrf_secret: csrfSecret,
   };
+}
+
+export async function createSessionForUser(input: {
+  userId: string;
+  organizationId: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  auditAction?: string;
+}): Promise<{ user: AuthUser; sessionToken: string; csrfToken: string } | null> {
+  const db = await getDbAsync();
+  const sessionToken = newToken(32);
+  const csrfSecret = newToken(24);
+  const sessionId = newId();
+  const expires = new Date(Date.now() + sessionDays() * 86400000).toISOString();
+
+  await db
+    .prepare(
+      `INSERT INTO sessions
+     (id, user_id, organization_id, token_hash, csrf_secret, expires_at, ip_address, user_agent)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      sessionId,
+      input.userId,
+      input.organizationId,
+      hashToken(sessionToken),
+      csrfSecret,
+      expires,
+      input.ipAddress ?? null,
+      input.userAgent ?? null,
+    );
+
+  await db
+    .prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?")
+    .run(input.userId);
+
+  await writeAudit({
+    organizationId: input.organizationId,
+    actorUserId: input.userId,
+    action: input.auditAction || "auth.login",
+    entityType: "user",
+    entityId: input.userId,
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+  });
+
+  const authUser = await loadAuthUser(input.userId, sessionId, csrfSecret);
+  if (!authUser) return null;
+  return { user: authUser, sessionToken, csrfToken: csrfSecret };
+}
+
+export async function loginUser(input: {
+  email: string;
+  password: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}): Promise<{ user: AuthUser; sessionToken: string; csrfToken: string } | null> {
+  await bootstrapApp();
+  const db = await getDbAsync();
+  const email = input.email.trim().toLowerCase();
+  const user = await db
+    .prepare<{
+      id: string;
+      organization_id: string;
+      email: string;
+      full_name: string;
+      password_hash: string;
+      is_active: number | boolean | string;
+    }>(
+      `SELECT id, organization_id, email, full_name, password_hash, is_active
+       FROM users WHERE lower(email) = ? LIMIT 1`,
+    )
+    .get(email);
+
+  if (!user || !isUserActive(user.is_active)) return null;
+  if (!user.password_hash || user.password_hash.startsWith("!")) return null;
+
+  const ok = bcrypt.compareSync(input.password, user.password_hash);
+  if (!ok) return null;
+
+  return createSessionForUser({
+    userId: user.id,
+    organizationId: user.organization_id,
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+    auditAction: "auth.login",
+  });
+}
+
+export async function logoutSession(sessionToken: string): Promise<void> {
+  const db = await getDbAsync();
+  await db
+    .prepare(
+      "UPDATE sessions SET revoked_at = datetime('now') WHERE token_hash = ?",
+    )
+    .run(hashToken(sessionToken));
 }
 
 export async function getSessionUser(): Promise<AuthUser | null> {
@@ -214,7 +243,6 @@ export async function getUserFromApiKey(apiKey: string): Promise<AuthUser | null
   if (!user) return null;
 
   const scopes = parseJsonArray<PermissionCode>(row.scopes_json);
-  // API keys are scoped — intersect with user permissions
   user.permissions = user.permissions.filter((p) => scopes.includes(p));
   return user;
 }
@@ -237,3 +265,25 @@ export function verifyCsrf(user: AuthUser, provided?: string | null): boolean {
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
 }
+
+export function sessionCookieOptions(maxAge = sessionDays() * 86400) {
+  return {
+    httpOnly: true as const,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
+  };
+}
+
+export function csrfCookieOptions(maxAge = sessionDays() * 86400) {
+  return {
+    httpOnly: false as const,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
+  };
+}
+
+export { hashToken };

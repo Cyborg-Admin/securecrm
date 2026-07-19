@@ -79,11 +79,14 @@ export async function PATCH(req: NextRequest) {
 
   const d = parsed.data;
   if (d.newPassword) {
-    if (!d.currentPassword) {
-      return error("Current password required to set a new password", 400);
+    const magicOnly = existing.password_hash.startsWith("!");
+    if (!magicOnly) {
+      if (!d.currentPassword) {
+        return error("Current password required to set a new password", 400);
+      }
+      const ok = bcrypt.compareSync(d.currentPassword, existing.password_hash);
+      if (!ok) return error("Current password is incorrect", 403);
     }
-    const ok = bcrypt.compareSync(d.currentPassword, existing.password_hash);
-    if (!ok) return error("Current password is incorrect", 403);
   }
 
   if (d.email && d.email.toLowerCase() !== existing.email) {

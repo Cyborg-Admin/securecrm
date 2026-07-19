@@ -75,6 +75,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_agent      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS magic_links (
+  id              TEXT PRIMARY KEY,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  token_hash      TEXT NOT NULL UNIQUE,
+  expires_at      TEXT NOT NULL,
+  consumed_at     TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  ip_address      TEXT,
+  user_agent      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_magic_links_user ON magic_links(user_id);
+
 -- -----------------------------------------------------------------------------
 -- Companies (shared object graph + duplicate detection)
 -- -----------------------------------------------------------------------------

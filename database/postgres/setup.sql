@@ -70,6 +70,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_agent      TEXT
 );
 
+CREATE TABLE IF NOT EXISTS magic_links (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  token_hash      TEXT NOT NULL UNIQUE,
+  expires_at      TIMESTAMPTZ NOT NULL,
+  consumed_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ip_address      TEXT,
+  user_agent      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_magic_links_user ON magic_links(user_id);
+
 CREATE TABLE IF NOT EXISTS companies (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

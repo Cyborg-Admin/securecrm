@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import {
-  loginUser,
   SESSION_COOKIE,
   CSRF_COOKIE,
   sessionCookieOptions,
@@ -9,10 +8,10 @@ import {
 } from "@/lib/auth";
 import { clientMeta, error, json } from "@/lib/api";
 import { bootstrapApp } from "@/lib/bootstrap";
+import { consumeMagicLink } from "@/lib/magic-link";
 
 const schema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8).max(200),
+  token: z.string().min(20).max(500),
 });
 
 export async function POST(req: NextRequest) {
@@ -26,30 +25,25 @@ export async function POST(req: NextRequest) {
     }
 
     const parsed = schema.safeParse(body);
-    if (!parsed.success) return error("Invalid credentials payload", 400);
+    if (!parsed.success) return error("Invalid or missing token", 400);
 
     const meta = clientMeta(req);
-    const result = await loginUser({
-      email: parsed.data.email,
-      password: parsed.data.password,
+    const result = await consumeMagicLink({
+      token: parsed.data.token,
       ...meta,
     });
 
     if (!result) {
-      return error(
-        "Invalid email or password. Try a magic link if your account uses passwordless sign-in.",
-        401,
-      );
+      return error("This sign-in link is invalid or has expired.", 401);
     }
 
     const res = json({
+      ok: true,
       user: {
         id: result.user.id,
         email: result.user.email,
         full_name: result.user.full_name,
-        organization_id: result.user.organization_id,
         roles: result.user.roles,
-        permissions: result.user.permissions,
       },
       csrfToken: result.csrfToken,
     });
@@ -58,8 +52,8 @@ export async function POST(req: NextRequest) {
     res.cookies.set(CSRF_COOKIE, result.csrfToken, csrfCookieOptions());
     return res;
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Login failed";
-    console.error("[auth.login]", message);
-    return error("Sign-in failed. Please try again or use a magic link.", 500);
+    const message = e instanceof Error ? e.message : "Magic link failed";
+    console.error("[auth.magic.consume]", message);
+    return error("Could not complete sign-in.", 500);
   }
 }

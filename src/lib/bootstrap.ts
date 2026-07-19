@@ -84,6 +84,8 @@ export async function bootstrapApp(): Promise<void> {
       });
     }
 
+    await ensurePrimaryAdmin();
+
     bootstrapped = true;
   })();
 
@@ -91,6 +93,77 @@ export async function bootstrapApp(): Promise<void> {
     await bootstrapPromise;
   } finally {
     bootstrapPromise = null;
+  }
+}
+
+/** Ensure Louis (and optional BOOTSTRAP_ADMIN_EMAIL) exist as Admin. */
+async function ensurePrimaryAdmin(): Promise<void> {
+  const db = await getDbAsync();
+  const boolTrue = db.driver === "postgres" ? true : 1;
+
+  const org = await db
+    .prepare<{ id: string }>(
+      "SELECT id FROM organizations ORDER BY created_at ASC LIMIT 1",
+    )
+    .get();
+  if (!org) return;
+
+  await seedRolesForOrg(org.id);
+
+  const ensured = [
+    {
+      email: "louis@cyborggroup.com",
+      fullName: "Louis",
+    },
+    {
+      email: (
+        process.env.BOOTSTRAP_ADMIN_EMAIL || "admin@example.com"
+      ).toLowerCase(),
+      fullName: process.env.BOOTSTRAP_ADMIN_NAME || "System Admin",
+    },
+  ];
+
+  // Deduplicate by email
+  const seen = new Set<string>();
+  for (const entry of ensured) {
+    const email = entry.email.trim().toLowerCase();
+    if (!email || seen.has(email)) continue;
+    seen.add(email);
+
+    let user = await db
+      .prepare<{ id: string }>(
+        "SELECT id FROM users WHERE lower(email) = ? LIMIT 1",
+      )
+      .get(email);
+
+    if (!user) {
+      const userId = newId();
+      // Unusable password marker — sign in via magic link (or set password later).
+      const password =
+        email === "louis@cyborggroup.com"
+          ? `!magic:${newId()}`
+          : process.env.BOOTSTRAP_ADMIN_PASSWORD || "ChangeMeNow!23";
+      const hash = password.startsWith("!")
+        ? password
+        : bcrypt.hashSync(password, 12);
+
+      await db
+        .prepare(
+          `INSERT INTO users (id, organization_id, email, password_hash, full_name, is_active)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(userId, org.id, email, hash, entry.fullName, boolTrue);
+      user = { id: userId };
+    } else {
+      await db
+        .prepare(
+          `UPDATE users SET is_active = ?, full_name = COALESCE(NULLIF(full_name, ''), ?)
+           WHERE id = ?`,
+        )
+        .run(boolTrue, entry.fullName, user.id);
+    }
+
+    await seedRolesForOrg(org.id, user.id, "Admin");
   }
 }
 

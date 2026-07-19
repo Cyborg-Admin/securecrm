@@ -32,22 +32,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     api<MeResponse>("/api/auth/me")
-      .then(setMe)
-      .catch(() => router.replace("/login"));
+      .then((data) => {
+        if (!cancelled) {
+          setMe(data);
+          setReady(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMe(null);
+          setReady(false);
+          router.replace("/login");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
     router.replace("/login");
+    router.refresh();
   }
 
-  const perms = new Set(me?.user.permissions || []);
+  // Never paint CRM chrome or page content until the session is confirmed.
+  if (!ready || !me) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg)]">
+        <p className="text-sm text-[var(--neo-muted)]">Verifying session…</p>
+      </div>
+    );
+  }
+
+  const perms = new Set(me.user.permissions || []);
   const initials =
-    me?.user.full_name
+    me.user.full_name
       ?.split(/\s+/)
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
@@ -64,12 +90,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mb-7 fade-up px-1">
             <p className="display text-[1.7rem] text-[var(--accent)]">SecureCRM</p>
             <p className="mt-1 text-sm text-[var(--neo-muted)]">
-              {me?.organization.name || "Loading workspace…"}
+              {me.organization.name}
             </p>
           </div>
 
           <nav className="flex flex-1 flex-col gap-1.5">
-            {NAV.filter((n) => perms.has(n.perm) || !me).map((item) => {
+            {NAV.filter((n) => perms.has(n.perm)).map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <Link
@@ -101,10 +127,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold">
-                  {me?.user.full_name || "…"}
+                  {me.user.full_name}
                 </span>
                 <span className="block truncate text-xs text-[var(--neo-muted)]">
-                  {me?.user.roles?.join(" · ") || "Account"}
+                  {me.user.roles?.join(" · ") || "Account"}
                 </span>
               </span>
             </Link>
