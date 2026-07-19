@@ -15,7 +15,13 @@ export function SaveBadge({
         ? "Saved"
         : error || "Error";
   return (
-    <span className="save-pulse border border-black bg-white px-3 py-1 text-xs text-black">
+    <span
+      className={`save-pulse rounded-full px-3 py-1 text-xs ${
+        status === "error"
+          ? "bg-rose-50 text-[var(--danger)]"
+          : "bg-[var(--accent-soft)] text-[var(--accent-deep)]"
+      }`}
+    >
       {label}
     </span>
   );

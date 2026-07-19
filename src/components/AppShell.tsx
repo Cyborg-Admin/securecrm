@@ -19,6 +19,7 @@ type MeResponse = {
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", perm: "leads:read" },
+  { href: "/reports", label: "Reports", perm: "leads:read" },
   { href: "/leads", label: "Leads", perm: "leads:read" },
   { href: "/contacts", label: "Contacts", perm: "contacts:read" },
   { href: "/companies", label: "Companies", perm: "companies:read" },
@@ -45,23 +46,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const perms = new Set(me?.user.permissions || []);
+  const initials =
+    me?.user.full_name
+      ?.split(/\s+/)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("") || "SC";
 
   return (
     <div className="min-h-screen md:flex">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-[260px] p-4 transition-transform duration-300 md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-[272px] p-3 transition-transform duration-300 md:static md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="neo-raised flex h-full flex-col p-4">
-          <div className="mb-6 fade-up">
-            <p className="display text-2xl text-black">SecureCRM</p>
+        <div className="shell-sidebar neo-raised flex h-full flex-col p-4">
+          <div className="mb-7 fade-up px-1">
+            <p className="display text-[1.7rem] text-[var(--accent)]">SecureCRM</p>
             <p className="mt-1 text-sm text-[var(--neo-muted)]">
               {me?.organization.name || "Loading workspace…"}
             </p>
           </div>
 
-          <nav className="flex flex-1 flex-col gap-2">
+          <nav className="flex flex-1 flex-col gap-1.5">
             {NAV.filter((n) => perms.has(n.perm) || !me).map((item) => {
               const active = pathname.startsWith(item.href);
               return (
@@ -69,8 +76,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className={`rounded-2xl px-3 py-2.5 text-sm transition-all ${
-                    active ? "neo-pressed font-semibold text-[var(--neo-accent)]" : "hover:neo-pressed"
+                  className={`rounded-xl px-3 py-2.5 text-sm transition-all ${
+                    active
+                      ? "neo-pressed font-semibold text-[var(--accent-deep)]"
+                      : "text-[var(--ink-soft)] hover:bg-white/70"
                   }`}
                 >
                   {item.label}
@@ -79,10 +88,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <div className="neo-inset mt-4 p-3 text-sm">
-            <p className="font-medium">{me?.user.full_name || "…"}</p>
-            <p className="text-[var(--neo-muted)]">{me?.user.roles?.join(", ")}</p>
-            <button className="neo-btn mt-3 w-full text-sm" onClick={logout}>
+          <div className="mt-4 space-y-2">
+            <Link
+              href="/profile"
+              onClick={() => setOpen(false)}
+              className={`neo-inset flex items-center gap-3 p-3 transition hover:border-[var(--accent)] ${
+                pathname.startsWith("/profile") ? "neo-pressed" : ""
+              }`}
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-deep)]">
+                {initials}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">
+                  {me?.user.full_name || "…"}
+                </span>
+                <span className="block truncate text-xs text-[var(--neo-muted)]">
+                  {me?.user.roles?.join(" · ") || "Account"}
+                </span>
+              </span>
+            </Link>
+            <button className="neo-btn w-full text-sm" onClick={logout}>
               Sign out
             </button>
           </div>
@@ -91,25 +117,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {open && (
         <button
-          className="fixed inset-0 z-30 bg-black/20 md:hidden"
+          className="fixed inset-0 z-30 bg-[rgba(20,32,28,0.28)] md:hidden"
           aria-label="Close menu"
           onClick={() => setOpen(false)}
         />
       )}
 
       <div className="flex min-h-screen flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-white px-4 py-3 md:px-6">
+        <header className="sticky top-0 z-20 mx-3 mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-white/75 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur-md md:mx-5 md:px-5">
           <button className="neo-btn md:hidden" onClick={() => setOpen(true)}>
             Menu
           </button>
           <div className="hidden md:block">
-            <p className="text-sm text-[var(--neo-muted)]">Security · Accountability · Automation</p>
+            <p className="page-kicker">Workspace</p>
+            <p className="text-sm text-[var(--neo-muted)]">
+              Security · Accountability · Automation
+            </p>
           </div>
-          <div className="border border-[var(--line)] px-3 py-2 text-xs text-[var(--neo-muted)]">
-            Dynamic workspace
-          </div>
+          <Link href="/profile" className="neo-btn text-sm">
+            My profile
+          </Link>
         </header>
-        <main className="flex-1 px-4 pb-24 md:px-6">{children}</main>
+        <main className="flex-1 px-4 pb-24 pt-5 md:px-6">{children}</main>
         <QuickFab />
       </div>
     </div>

@@ -12,9 +12,10 @@ const ACTIONS: Array<{
 }> = [
   { id: "lead", label: "New lead", kind: "lead" },
   { id: "contact", label: "New contact", kind: "contact" },
+  { id: "reports", label: "Reports", href: "/reports" },
+  { id: "profile", label: "My profile", href: "/profile" },
   { id: "leads", label: "Leads", href: "/leads" },
   { id: "contacts", label: "Contacts", href: "/contacts" },
-  { id: "companies", label: "Companies", href: "/companies" },
 ];
 
 export function QuickFab() {

@@ -29,9 +29,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white px-4">
-      <form onSubmit={onSubmit} className="w-full max-w-md fade-up border border-[var(--line)] p-8">
-        <p className="display text-4xl text-black">SecureCRM</p>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      <div
+        className="pointer-events-none absolute -left-20 top-0 h-80 w-80 rounded-full opacity-70"
+        style={{ background: "radial-gradient(circle, rgba(13,122,95,.22), transparent 70%)" }}
+      />
+      <div
+        className="pointer-events-none absolute -right-16 bottom-0 h-96 w-96 rounded-full opacity-60"
+        style={{ background: "radial-gradient(circle, rgba(180,83,9,.14), transparent 70%)" }}
+      />
+
+      <form onSubmit={onSubmit} className="neo-raised relative w-full max-w-md fade-up p-8">
+        <p className="page-kicker">Secure workspace</p>
+        <p className="display mt-2 text-4xl text-[var(--accent-deep)]">SecureCRM</p>
         <p className="mt-2 text-[var(--neo-muted)]">
           Multi-user CRM with RBAC, audit trails, and capture automation.
         </p>
@@ -56,17 +66,11 @@ export default function LoginPage() {
           autoComplete="current-password"
         />
 
-        {error && (
-          <p className="mt-4 text-sm text-black underline decoration-neutral-400">{error}</p>
-        )}
+        {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
 
         <button className="neo-btn neo-btn-primary mt-6 w-full" disabled={loading}>
           {loading ? "Signing in…" : "Enter workspace"}
         </button>
-
-        <p className="mt-5 text-xs text-[var(--neo-muted)]">
-          Default bootstrap: admin@example.com / ChangeMeNow!23
-        </p>
       </form>
     </div>
   );
