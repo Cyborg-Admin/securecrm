@@ -28,17 +28,25 @@ export async function POST(req: NextRequest) {
       origin: req.nextUrl.origin,
     });
 
+    if (result.mailError) {
+      return error(result.mailError, 503);
+    }
+
     return json({
       ok: true,
-      message:
-        "If that email is registered, a sign-in link is on its way. Check your inbox.",
+      mailed: result.mailed,
+      message: result.mailed
+        ? "Sign-in link sent. Check your inbox (and spam)."
+        : "If that email is registered, a sign-in link is on its way. Check your inbox.",
       ...(result.devMagicUrl ? { devMagicUrl: result.devMagicUrl } : {}),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Magic link failed";
     console.error("[auth.magic.request]", message);
     return error(
-      "Could not send sign-in link. Ask an admin to configure SENDGRID_API_KEY / MAIL_FROM.",
+      message.includes("SendGrid") || message.includes("magic_links")
+        ? message
+        : "Could not send sign-in link. Check SENDGRID_API_KEY / MAIL_FROM and app logs.",
       503,
     );
   }

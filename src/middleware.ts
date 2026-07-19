@@ -12,6 +12,7 @@ const PUBLIC_PREFIXES = [
   "/_next/",
   "/api/auth/login",
   "/api/auth/magic",
+  "/api/auth/mail-health",
   "/api/extension/",
 ];
 

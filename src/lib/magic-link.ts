@@ -13,6 +13,8 @@ export async function requestMagicLink(input: {
   origin?: string | null;
 }): Promise<{
   accepted: true;
+  mailed: boolean;
+  mailError?: string;
   /** Only returned outside production when mail is not configured. */
   devMagicUrl?: string;
 }> {
@@ -33,8 +35,11 @@ export async function requestMagicLink(input: {
 
   // Always accept — do not reveal whether the account exists.
   if (!user || !isUserActive(user.is_active)) {
-    return { accepted: true };
+    console.info("[magic-link] no active user for requested email");
+    return { accepted: true, mailed: false };
   }
+
+  console.info("[magic-link] issuing link for user", user.id);
 
   const token = newToken(32);
   const id = newId();
@@ -82,11 +87,12 @@ export async function requestMagicLink(input: {
   });
 
   if (!mail.ok) {
-    // Still issue the link — ops can pull it from logs until SendGrid is configured.
     console.warn("[magic-link] email send failed:", mail.error);
     console.info("[magic-link] sign-in URL for", user.email, magicUrl);
     return {
       accepted: true,
+      mailed: false,
+      mailError: mail.error,
       ...(process.env.NODE_ENV !== "production"
         ? { devMagicUrl: magicUrl }
         : {}),
@@ -94,10 +100,10 @@ export async function requestMagicLink(input: {
   }
 
   if (mail.provider === "dev") {
-    return { accepted: true, devMagicUrl: magicUrl };
+    return { accepted: true, mailed: true, devMagicUrl: magicUrl };
   }
 
-  return { accepted: true };
+  return { accepted: true, mailed: true };
 }
 
 export async function consumeMagicLink(input: {

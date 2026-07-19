@@ -44,6 +44,7 @@ export default function LoginPage() {
     try {
       const res = await api<{
         message: string;
+        mailed?: boolean;
         devMagicUrl?: string;
       }>("/api/auth/magic/request", {
         method: "POST",
