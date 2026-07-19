@@ -6,7 +6,6 @@ data
 .env.local
 .env.*.local
 *.md
-extension
 AGENTS.md
 CLAUDE.md
 .cursor

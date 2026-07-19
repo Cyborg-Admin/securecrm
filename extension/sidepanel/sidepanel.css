@@ -1,0 +1,202 @@
+@import url("https://fonts.cdnfonts.com/css/garet");
+
+:root {
+  --bg: #f3f6f4;
+  --panel: #ffffff;
+  --ink: #14201c;
+  --muted: #5f7169;
+  --line: #d7e0db;
+  --accent: #0d7a5f;
+  --accent-soft: #e6f3ee;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Garet", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(120% 80% at 0% 0%, #e8f2ed 0%, transparent 55%),
+    linear-gradient(180deg, #f7faf8 0%, var(--bg) 100%);
+  padding: 14px;
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.tab.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.panel {
+  display: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.panel.active {
+  display: block;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.field input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  margin: 14px 0 8px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.primary,
+.ghost,
+a#downloadUpdate {
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--ink);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.primary {
+  background: var(--ink);
+  color: #fff;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.list li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fafcfb;
+}
+
+.list li strong {
+  display: block;
+  font-size: 13px;
+}
+
+.list li span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.banner {
+  background: var(--accent-soft);
+  border: 1px solid #b7d8cb;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.banner p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tiny {
+  font-size: 11px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.row h2 {
+  margin: 0;
+  font-size: 14px;
+}

@@ -30,6 +30,7 @@ RUN mkdir -p /app/data \
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/database ./database
+COPY --from=builder /app/extension ./extension
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 

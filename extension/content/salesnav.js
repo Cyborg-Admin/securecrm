@@ -148,82 +148,106 @@
     }
   }
 
-  function mount() {
-    if (document.getElementById("scrm-float-salesnav")) return;
-    const bar = document.createElement("div");
-    bar.id = "scrm-float-salesnav";
-    bar.className = "scrm-float-bar";
-
-    if (isLeadProfile()) {
-      bar.innerHTML = `<button class="primary" id="scrm-sn-one">Capture lead</button>`;
-      document.documentElement.appendChild(bar);
-      bar.querySelector("#scrm-sn-one").onclick = async () => {
-        try {
-          const scraped = scrapeProfile();
-          const lead = await SecureCRMForm.showLeadForm(
-            scraped || {
-              linkedinUrl: SecureCRM.normalizeLinkedIn(location.href),
-              fullName: "",
-              jobTitle: null,
-              companyName: null,
-              industry: null,
-              website: null,
-              location: null,
-              headline: null,
-              metadata: { page: "salesnav_manual" },
-            },
-          );
-          if (!lead) return;
-          const res = await SecureCRM.captureLeads({
-            source: SOURCE,
-            sourceUrl: location.href,
-            leads: [lead],
-          });
-          SecureCRMPanel.setStatus(
-            `${lead.fullName}: ${res.created ? "created" : "updated"}`,
-          );
-        } catch (e) {
-          SecureCRMPanel.setStatus(e.message);
-        }
-      };
+  async function mount() {
+    document.getElementById("scrm-float-salesnav")?.remove();
+    if (!isLeadProfile() && !isSearch()) {
+      SecureCRMFAB.remove();
       return;
     }
 
-    if (isSearch()) {
-      bar.innerHTML = `
-        <button id="scrm-sn-page">Capture page</button>
-        <button class="primary" id="scrm-sn-bulk">Bulk + next pages</button>
-        <button id="scrm-sn-stop">Stop</button>
-      `;
-      document.documentElement.appendChild(bar);
-      bar.querySelector("#scrm-sn-page").onclick = async () => {
-        try {
-          const leads = scrapeSearchResults();
-          if (!leads.length) {
-            SecureCRMPanel.setStatus("No Sales Nav rows found on this page.");
-            return;
-          }
-          const res = await SecureCRMForm.captureManyWithForm(
-            SOURCE,
-            location.href,
-            leads,
-            { startBatch: true, finishBatch: true },
-          );
-          SecureCRMPanel.setStatus(`Saved page: ${res.created} new, ${res.updated} updated`);
-        } catch (e) {
-          SecureCRMPanel.setStatus(e.message);
-        }
-      };
-      bar.querySelector("#scrm-sn-bulk").onclick = () => runBulk(10);
-      bar.querySelector("#scrm-sn-stop").onclick = () => {
-        bulkRunning = false;
-        SecureCRMPanel.setStatus("Stopped.");
-      };
+    if (isLeadProfile()) {
+      await SecureCRMFAB.mount(
+        [
+          {
+            id: "one",
+            label: "Capture lead",
+            primary: true,
+            onClick: async () => {
+              try {
+                const scraped = scrapeProfile();
+                const lead = await SecureCRMForm.showLeadForm(
+                  scraped || {
+                    linkedinUrl: SecureCRM.normalizeLinkedIn(location.href),
+                    fullName: "",
+                    jobTitle: null,
+                    companyName: null,
+                    industry: null,
+                    website: null,
+                    location: null,
+                    headline: null,
+                    metadata: { page: "salesnav_manual" },
+                  },
+                );
+                if (!lead) return;
+                const res = await SecureCRM.captureLeads({
+                  source: SOURCE,
+                  sourceUrl: location.href,
+                  leads: [lead],
+                });
+                SecureCRMPanel.setStatus(
+                  `${lead.fullName}: ${res.created ? "created" : "updated"}`,
+                );
+              } catch (e) {
+                SecureCRMPanel.setStatus(e.message);
+              }
+            },
+          },
+        ],
+        { title: "SecureCRM · Sales Nav" },
+      );
+      return;
     }
+
+    const cfg = await SecureCRM.getConfig();
+    await SecureCRMFAB.mount(
+      [
+        {
+          id: "page",
+          label: "Capture page",
+          onClick: async () => {
+            try {
+              const leads = scrapeSearchResults();
+              if (!leads.length) {
+                SecureCRMPanel.setStatus("No Sales Nav rows found on this page.");
+                return;
+              }
+              const res = await SecureCRMForm.captureManyWithForm(
+                SOURCE,
+                location.href,
+                leads,
+                { startBatch: true, finishBatch: true },
+              );
+              SecureCRMPanel.setStatus(
+                `Saved page: ${res.created} new, ${res.updated} updated`,
+              );
+            } catch (e) {
+              SecureCRMPanel.setStatus(e.message);
+            }
+          },
+        },
+        {
+          id: "bulk",
+          label: "Bulk + next pages",
+          primary: true,
+          onClick: () => runBulk(cfg.bulkPageLimit || 10),
+        },
+        {
+          id: "stop",
+          label: "Stop",
+          onClick: () => {
+            bulkRunning = false;
+            SecureCRMPanel.setStatus("Stopped.");
+          },
+        },
+      ],
+      { title: "SecureCRM · Sales Nav search" },
+    );
   }
 
   mount();
-  new MutationObserver(mount).observe(document.documentElement, {
+  new MutationObserver(() => {
+    if (!document.getElementById("scrm-fab-root")) mount();
+  }).observe(document.documentElement, {
     childList: true,
     subtree: true,
   });

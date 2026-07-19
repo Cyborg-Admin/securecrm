@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppShell } from "@/components/AppShell";
+import { ClientOnly } from "@/components/ClientOnly";
 import { api } from "@/lib/client-api";
 
 type Dash = {
@@ -85,26 +86,34 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="mt-4 h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={reports?.captureByDay || []}>
-                <defs>
-                  <linearGradient id="dashFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0d7a5f" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#0d7a5f" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="day" hide />
-                <YAxis hide allowDecimals={false} />
-                <Tooltip />
-                <Area
-                  type="monotone"
-                  dataKey="leads"
-                  stroke="#0d7a5f"
-                  fill="url(#dashFill)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <ClientOnly
+              fallback={
+                <div className="flex h-full items-center justify-center text-sm text-[var(--neo-muted)]">
+                  Loading chart…
+                </div>
+              }
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={reports?.captureByDay || []}>
+                  <defs>
+                    <linearGradient id="dashFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0d7a5f" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#0d7a5f" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="day" hide />
+                  <YAxis hide allowDecimals={false} />
+                  <Tooltip />
+                  <Area
+                    type="monotone"
+                    dataKey="leads"
+                    stroke="#0d7a5f"
+                    fill="url(#dashFill)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ClientOnly>
           </div>
         </div>
 
@@ -115,7 +124,8 @@ export default function DashboardPage() {
               <li key={a.id} className="neo-inset p-3 text-sm">
                 <p className="font-medium">{a.action}</p>
                 <p className="text-[var(--neo-muted)]">
-                  {a.entity_type || "system"} · {new Date(a.created_at).toLocaleString()}
+                  {a.entity_type || "system"} ·{" "}
+                  {a.created_at?.slice(0, 19).replace("T", " ") || "—"}
                 </p>
               </li>
             ))}

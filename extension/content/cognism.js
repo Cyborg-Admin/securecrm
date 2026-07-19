@@ -137,59 +137,77 @@
     }
   }
 
-  function mount() {
-    if (document.getElementById("scrm-float-cognism")) return;
-    const bar = document.createElement("div");
-    bar.id = "scrm-float-cognism";
-    bar.className = "scrm-float-bar";
-    bar.innerHTML = `
-      <button id="scrm-cg-one">Capture profile</button>
-      <button id="scrm-cg-page">Capture page</button>
-      <button class="primary" id="scrm-cg-bulk">Bulk + next pages</button>
-      <button id="scrm-cg-stop">Stop</button>
-    `;
-    document.documentElement.appendChild(bar);
-
-    bar.querySelector("#scrm-cg-one").onclick = async () => {
-      try {
-        const lead = scrapeProfile();
-        if (!lead?.fullName) return SecureCRMPanel.setStatus("No Cognism profile detected.");
-        const res = await SecureCRM.captureLeads({
-          source: SOURCE,
-          sourceUrl: location.href,
-          leads: [lead],
-        });
-        SecureCRMPanel.setStatus(`${lead.fullName}: ${res.created ? "created" : "updated"}`);
-      } catch (e) {
-        SecureCRMPanel.setStatus(e.message);
-      }
-    };
-
-    bar.querySelector("#scrm-cg-page").onclick = async () => {
-      try {
-        const leads = scrapeCards();
-        const res = await SecureCRM.captureLeads({
-          source: SOURCE,
-          sourceUrl: location.href,
-          startBatch: true,
-          finishBatch: true,
-          leads,
-        });
-        SecureCRMPanel.setStatus(`Page: ${res.created} new, ${res.updated} updated`);
-      } catch (e) {
-        SecureCRMPanel.setStatus(e.message);
-      }
-    };
-
-    bar.querySelector("#scrm-cg-bulk").onclick = () => runBulk(10);
-    bar.querySelector("#scrm-cg-stop").onclick = () => {
-      bulkRunning = false;
-      SecureCRMPanel.setStatus("Stopped.");
-    };
+  async function mount() {
+    document.getElementById("scrm-float-cognism")?.remove();
+    const cfg = await SecureCRM.getConfig();
+    await SecureCRMFAB.mount(
+      [
+        {
+          id: "one",
+          label: "Capture profile",
+          onClick: async () => {
+            try {
+              const lead = scrapeProfile();
+              if (!lead?.fullName) {
+                return SecureCRMPanel.setStatus("No Cognism profile detected.");
+              }
+              const res = await SecureCRM.captureLeads({
+                source: SOURCE,
+                sourceUrl: location.href,
+                leads: [lead],
+              });
+              SecureCRMPanel.setStatus(
+                `${lead.fullName}: ${res.created ? "created" : "updated"}`,
+              );
+            } catch (e) {
+              SecureCRMPanel.setStatus(e.message);
+            }
+          },
+        },
+        {
+          id: "page",
+          label: "Capture page",
+          onClick: async () => {
+            try {
+              const leads = scrapeCards();
+              const res = await SecureCRM.captureLeads({
+                source: SOURCE,
+                sourceUrl: location.href,
+                startBatch: true,
+                finishBatch: true,
+                leads,
+              });
+              SecureCRMPanel.setStatus(
+                `Page: ${res.created} new, ${res.updated} updated`,
+              );
+            } catch (e) {
+              SecureCRMPanel.setStatus(e.message);
+            }
+          },
+        },
+        {
+          id: "bulk",
+          label: "Bulk + next pages",
+          primary: true,
+          onClick: () => runBulk(cfg.bulkPageLimit || 10),
+        },
+        {
+          id: "stop",
+          label: "Stop",
+          onClick: () => {
+            bulkRunning = false;
+            SecureCRMPanel.setStatus("Stopped.");
+          },
+        },
+      ],
+      { title: "SecureCRM · Cognism" },
+    );
   }
 
   mount();
-  new MutationObserver(mount).observe(document.documentElement, {
+  new MutationObserver(() => {
+    if (!document.getElementById("scrm-fab-root")) mount();
+  }).observe(document.documentElement, {
     childList: true,
     subtree: true,
   });

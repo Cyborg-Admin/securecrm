@@ -45,9 +45,21 @@ export default function SettingsPage() {
       </p>
 
       <section className="neo-raised mt-5 p-5">
-        <h2 className="display text-xl">Chrome extension key</h2>
+        <h2 className="display text-xl">Chrome extension</h2>
         <p className="mt-1 text-sm text-[var(--neo-muted)]">
-          Paste this into the extension popup. Keys are hashed at rest.
+          Generate a key, then paste it in the extension side panel (toolbar icon).
+          Keys are hashed at rest. Download the latest packaged build anytime:
+        </p>
+        <p className="mt-3">
+          <a className="neo-btn neo-btn-primary inline-block" href="/api/extension/download">
+            Download extension zip
+          </a>
+          <span className="ml-3 text-xs text-[var(--neo-muted)]">
+            Current package reports version via{" "}
+            <a className="underline" href="/api/extension/version">
+              /api/extension/version
+            </a>
+          </span>
         </p>
         <form onSubmit={onCreate} className="mt-4 flex flex-col gap-3 sm:flex-row">
           <input className="neo-input" value={name} onChange={(e) => setName(e.target.value)} />

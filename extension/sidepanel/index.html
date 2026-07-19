@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SecureCRM</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="head">
+      <div>
+        <h1>SecureCRM</h1>
+        <p class="sub">Pinned workspace · v<span id="localVersion">—</span></p>
+      </div>
+      <button type="button" id="checkUpdate" class="ghost">Check update</button>
+    </header>
+
+    <div id="updateBanner" class="banner" hidden>
+      <p>
+        Update available: <strong id="remoteVersion"></strong>
+      </p>
+      <p id="releaseNotes" class="muted"></p>
+      <a id="downloadUpdate" href="#" target="_blank" rel="noreferrer">Download zip</a>
+      <p class="muted tiny">
+        Unzip → chrome://extensions → Reload unpacked (or Load unpacked).
+      </p>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="crm">CRM</button>
+      <button type="button" class="tab" data-tab="history">History</button>
+      <button type="button" class="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <section id="tab-crm" class="panel active">
+      <label class="field">
+        Search leads
+        <input id="leadSearch" type="search" placeholder="Name, company, title…" />
+      </label>
+      <ul id="leadList" class="list"></ul>
+      <p id="crmStatus" class="muted"></p>
+    </section>
+
+    <section id="tab-history" class="panel">
+      <div class="row">
+        <h2>Capture history</h2>
+        <button type="button" id="clearHistory" class="ghost">Clear</button>
+      </div>
+      <ul id="historyList" class="list"></ul>
+      <p id="historyEmpty" class="muted">No captures yet.</p>
+    </section>
+
+    <section id="tab-settings" class="panel">
+      <label class="field">
+        CRM base URL
+        <input id="apiBase" type="url" placeholder="https://crm.cyborgwales.com" />
+      </label>
+      <label class="field">
+        API key
+        <input id="apiKey" type="password" placeholder="scrm_…" autocomplete="off" />
+      </label>
+
+      <h2 class="section-title">Scanning</h2>
+      <label class="check">
+        <input id="showBadges" type="checkbox" />
+        Show in-CRM badges on LinkedIn results
+      </label>
+      <label class="check">
+        <input id="autoScanGmail" type="checkbox" />
+        Auto-scan open Gmail threads
+      </label>
+      <label class="check">
+        <input id="showFab" type="checkbox" />
+        Show floating action button (FAB)
+      </label>
+      <label class="field">
+        Bulk capture page limit
+        <input id="bulkPageLimit" type="number" min="1" max="50" />
+      </label>
+      <label class="field">
+        Compact CRM list size
+        <input id="compactCrmLimit" type="number" min="5" max="50" />
+      </label>
+
+      <button type="button" id="saveSettings" class="primary">Save settings</button>
+      <p id="settingsStatus" class="muted"></p>
+    </section>
+
+    <script src="../shared/crm-api.js"></script>
+    <script src="../shared/history.js"></script>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

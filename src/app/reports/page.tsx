@@ -16,6 +16,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppShell } from "@/components/AppShell";
+import { ClientOnly } from "@/components/ClientOnly";
 import { api } from "@/lib/client-api";
 
 type Reports = {
@@ -34,6 +35,14 @@ type Reports = {
 };
 
 const COLORS = ["#0d7a5f", "#0e7490", "#b45309", "#475569", "#047857", "#155e75", "#92400e"];
+
+function ChartFallback() {
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-[var(--neo-muted)]">
+      Loading chart…
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const [data, setData] = useState<Reports | null>(null);
@@ -75,85 +84,93 @@ export default function ReportsPage() {
         <div className="neo-raised p-5">
           <h2 className="display text-xl">Lead capture (14 days)</h2>
           <div className="mt-4 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data?.captureByDay || []}>
-                <defs>
-                  <linearGradient id="leadFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0d7a5f" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#0d7a5f" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="rgba(20,32,28,0.08)" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5f7169" }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
-                <Tooltip />
-                <Area
-                  type="monotone"
-                  dataKey="leads"
-                  stroke="#0d7a5f"
-                  fill="url(#leadFill)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <ClientOnly fallback={<ChartFallback />}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data?.captureByDay || []}>
+                  <defs>
+                    <linearGradient id="leadFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0d7a5f" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#0d7a5f" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(20,32,28,0.08)" vertical={false} />
+                  <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5f7169" }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
+                  <Tooltip />
+                  <Area
+                    type="monotone"
+                    dataKey="leads"
+                    stroke="#0d7a5f"
+                    fill="url(#leadFill)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ClientOnly>
           </div>
         </div>
 
         <div className="neo-raised p-5">
           <h2 className="display text-xl">By source</h2>
           <div className="mt-4 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data?.leadsBySource || []}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={3}
-                >
-                  {(data?.leadsBySource || []).map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <ClientOnly fallback={<ChartFallback />}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data?.leadsBySource || []}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={3}
+                  >
+                    {(data?.leadsBySource || []).map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </ClientOnly>
           </div>
         </div>
 
         <div className="neo-raised p-5">
           <h2 className="display text-xl">By status</h2>
           <div className="mt-4 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.leadsByStatus || []}>
-                <CartesianGrid stroke="rgba(20,32,28,0.08)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#5f7169" }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#0e7490" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ClientOnly fallback={<ChartFallback />}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data?.leadsByStatus || []}>
+                  <CartesianGrid stroke="rgba(20,32,28,0.08)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#5f7169" }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#0e7490" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ClientOnly>
           </div>
         </div>
 
         <div className="neo-raised p-5">
           <h2 className="display text-xl">Ownership load</h2>
           <div className="mt-4 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.leadsByOwner || []} layout="vertical" margin={{ left: 24 }}>
-                <CartesianGrid stroke="rgba(20,32,28,0.08)" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={90}
-                  tick={{ fontSize: 11, fill: "#5f7169" }}
-                />
-                <Tooltip />
-                <Bar dataKey="value" fill="#b45309" radius={[0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ClientOnly fallback={<ChartFallback />}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data?.leadsByOwner || []} layout="vertical" margin={{ left: 24 }}>
+                  <CartesianGrid stroke="rgba(20,32,28,0.08)" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={90}
+                    tick={{ fontSize: 11, fill: "#5f7169" }}
+                  />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#b45309" radius={[0, 8, 8, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ClientOnly>
           </div>
         </div>
       </section>
@@ -161,15 +178,17 @@ export default function ReportsPage() {
       <section className="neo-raised mt-4 p-5">
         <h2 className="display text-xl">Top companies in pipeline</h2>
         <div className="mt-4 h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data?.topCompanies || []}>
-              <CartesianGrid stroke="rgba(20,32,28,0.08)" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#5f7169" }} interval={0} angle={-18} textAnchor="end" height={70} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
-              <Tooltip />
-              <Bar dataKey="value" fill="#0d7a5f" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ClientOnly fallback={<ChartFallback />}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data?.topCompanies || []}>
+                <CartesianGrid stroke="rgba(20,32,28,0.08)" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#5f7169" }} interval={0} angle={-18} textAnchor="end" height={70} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5f7169" }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#0d7a5f" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ClientOnly>
         </div>
       </section>
     </AppShell>

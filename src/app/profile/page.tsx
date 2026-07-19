@@ -119,7 +119,7 @@ export default function ProfilePage() {
               <span className="text-[var(--neo-muted)]">Last login</span>
               <br />
               {data?.profile.last_login_at
-                ? new Date(data.profile.last_login_at).toLocaleString()
+                ? data.profile.last_login_at.slice(0, 19).replace("T", " ")
                 : "—"}
             </p>
           </div>

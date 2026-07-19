@@ -387,8 +387,10 @@
     );
   }
 
-  async function runBulk(pages = 10) {
+  async function runBulk(pages) {
     if (bulkRunning) return;
+    const cfg = await SecureCRM.getConfig();
+    pages = pages || cfg.bulkPageLimit || 10;
     bulkRunning = true;
     batchId = null;
     let page = 1;
@@ -442,56 +444,77 @@
     return "";
   }
 
-  function mountBar(force = false) {
+  async function mountFab(force = false) {
     const mode = desiredMode();
-    const existing = document.getElementById("scrm-float-linkedin");
     if (!mode) {
-      existing?.remove();
+      SecureCRMFAB.remove();
+      document.getElementById("scrm-float-linkedin")?.remove();
       barMode = "";
       return;
     }
-    if (!force && existing && barMode === mode) return;
-    existing?.remove();
+    if (!force && document.getElementById("scrm-fab-root") && barMode === mode) {
+      return;
+    }
     barMode = mode;
-
-    const bar = document.createElement("div");
-    bar.id = "scrm-float-linkedin";
-    bar.className = "scrm-float-bar";
+    document.getElementById("scrm-float-linkedin")?.remove();
 
     if (mode === "profile") {
-      bar.innerHTML = `<button class="primary" id="scrm-capture-one">Capture profile</button>`;
-      document.documentElement.appendChild(bar);
-      bar.querySelector("#scrm-capture-one").onclick = () => {
-        captureCurrentProfile().catch((e) =>
-          SecureCRMPanel.setStatus(e.message),
-        );
-      };
-      SecureCRMPanel.setStatus("Profile ready — capture when you want.");
+      await SecureCRMFAB.mount(
+        [
+          {
+            id: "capture",
+            label: "Capture profile",
+            primary: true,
+            onClick: () =>
+              captureCurrentProfile().catch((e) =>
+                SecureCRMPanel.setStatus(e.message),
+              ),
+          },
+        ],
+        { title: "SecureCRM · LinkedIn profile" },
+      );
+      SecureCRMPanel.setStatus("Profile ready — open FAB to capture.");
       return;
     }
 
-    bar.innerHTML = `
-      <button id="scrm-capture-page">Capture page</button>
-      <button class="primary" id="scrm-capture-bulk">Bulk + next pages</button>
-      <button id="scrm-stop">Stop</button>
-    `;
-    document.documentElement.appendChild(bar);
-    bar.querySelector("#scrm-capture-page").onclick = () => {
-      capturePage().catch((e) => SecureCRMPanel.setStatus(e.message));
-    };
-    bar.querySelector("#scrm-capture-bulk").onclick = () => runBulk(10);
-    bar.querySelector("#scrm-stop").onclick = () => {
-      bulkRunning = false;
-      SecureCRMPanel.setStatus("Bulk capture stopped.");
-    };
+    await SecureCRMFAB.mount(
+      [
+        {
+          id: "page",
+          label: "Capture page",
+          onClick: () =>
+            capturePage().catch((e) => SecureCRMPanel.setStatus(e.message)),
+        },
+        {
+          id: "bulk",
+          label: "Bulk + next pages",
+          primary: true,
+          onClick: () => runBulk(),
+        },
+        {
+          id: "stop",
+          label: "Stop bulk",
+          onClick: () => {
+            bulkRunning = false;
+            SecureCRMPanel.setStatus("Bulk capture stopped.");
+          },
+        },
+        {
+          id: "badges",
+          label: "Refresh CRM badges",
+          onClick: () => SecureCRMBadges.refresh(),
+        },
+      ],
+      { title: "SecureCRM · LinkedIn search" },
+    );
   }
 
   function onUrlMaybeChanged() {
     if (location.href === lastUrl) return;
     lastUrl = location.href;
-    mountBar(true);
+    mountFab(true);
+    SecureCRMBadges.refresh();
     if (isProfilePage()) {
-      // Give SPA a moment to paint, then refresh status with scraped name
       setTimeout(() => {
         const lead = scrapeProfile();
         SecureCRMPanel.setStatus(
@@ -503,7 +526,6 @@
     }
   }
 
-  // SPA navigation hooks
   const _push = history.pushState;
   const _replace = history.replaceState;
   history.pushState = function (...args) {
@@ -518,11 +540,12 @@
   };
   window.addEventListener("popstate", onUrlMaybeChanged);
 
-  mountBar(true);
+  mountFab(true);
+  SecureCRMBadges.start();
   setInterval(onUrlMaybeChanged, 800);
   new MutationObserver(() => {
-    if (!document.getElementById("scrm-float-linkedin") && desiredMode()) {
-      mountBar(true);
+    if (!document.getElementById("scrm-fab-root") && desiredMode()) {
+      mountFab(true);
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
 })();

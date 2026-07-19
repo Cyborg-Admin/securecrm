@@ -1,16 +1,10 @@
-const apiBase = document.getElementById("apiBase");
-const apiKey = document.getElementById("apiKey");
 const status = document.getElementById("status");
+const local = chrome.runtime.getManifest().version;
+status.textContent = `Installed v${local}`;
 
-chrome.storage.sync.get(["apiBase", "apiKey"], (data) => {
-  apiBase.value = data.apiBase || "http://localhost:3000";
-  apiKey.value = data.apiKey || "";
-});
-
-document.getElementById("save").addEventListener("click", async () => {
-  await chrome.storage.sync.set({
-    apiBase: apiBase.value.trim() || "http://localhost:3000",
-    apiKey: apiKey.value.trim(),
-  });
-  status.textContent = "Saved. Reload LinkedIn/Gmail tabs.";
+chrome.storage.local.get(["extensionUpdate"], (data) => {
+  const u = data.extensionUpdate;
+  if (u?.updateAvailable) {
+    status.textContent = `Update available: v${u.remoteVersion} (you have v${local})`;
+  }
 });

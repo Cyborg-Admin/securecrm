@@ -159,7 +159,9 @@
 
   function scheduleScan() {
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => {
+    scanTimer = setTimeout(async () => {
+      const cfg = await SecureCRM.getConfig();
+      if (!cfg.autoScanGmail) return;
       const person = parseOpenEmail();
       if (!person.fullName && !person.email && !person.linkedinUrl) return;
       const fp = fingerprint(person);
@@ -168,28 +170,34 @@
     }, 450);
   }
 
-  function mount() {
-    if (document.getElementById("scrm-float-gmail")) return;
-    const bar = document.createElement("div");
-    bar.id = "scrm-float-gmail";
-    bar.className = "scrm-float-bar";
-    bar.innerHTML = `
-      <button class="primary" id="scrm-gmail-match">Match to CRM</button>
-      <button id="scrm-gmail-rescan">Rescan</button>
-    `;
-    document.documentElement.appendChild(bar);
-    bar.querySelector("#scrm-gmail-match").onclick = () => runMatch();
-    bar.querySelector("#scrm-gmail-rescan").onclick = () => {
-      lastFingerprint = "";
-      runMatch();
-    };
+  async function mount() {
+    document.getElementById("scrm-float-gmail")?.remove();
+    await SecureCRMFAB.mount(
+      [
+        {
+          id: "match",
+          label: "Match to CRM",
+          primary: true,
+          onClick: () => runMatch(),
+        },
+        {
+          id: "rescan",
+          label: "Rescan thread",
+          onClick: () => {
+            lastFingerprint = "";
+            runMatch();
+          },
+        },
+      ],
+      { title: "SecureCRM · Gmail" },
+    );
   }
 
   mount();
   scheduleScan();
 
   new MutationObserver(() => {
-    mount();
+    if (!document.getElementById("scrm-fab-root")) mount();
     scheduleScan();
   }).observe(document.documentElement, { childList: true, subtree: true });
 
