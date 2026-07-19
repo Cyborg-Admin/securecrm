@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { captureLead } from "@/lib/leads";
 
 const captureSchema = z.object({
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const user = await requireUser(req, "leads:read");
   if (isResponse(user)) return user;
 
-  const db = getDb();
+  const db = await getDbAsync();
   const q = req.nextUrl.searchParams.get("q")?.trim();
   const status = req.nextUrl.searchParams.get("status")?.trim();
   const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") || 50), 200);
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   sql += " ORDER BY l.updated_at DESC LIMIT ?";
   params.push(limit);
 
-  const leads = db.prepare(sql).all(...params);
+  const leads = await db.prepare(sql).all(...params);
   return json({ leads });
 }
 
@@ -67,12 +67,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = captureLead({
+    const result = await captureLead({
       organizationId: user.organization_id,
       actorUserId: user.id,
       ...parsed.data,
     });
-    return json(result, result.created ? 201 : 200);
+    return json(
+      { lead: result.lead, created: result.created, companyId: result.companyId },
+      result.created ? 201 : 200,
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Capture failed";
     return error(message, 400);

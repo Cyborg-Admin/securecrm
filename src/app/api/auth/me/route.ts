@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser(req);
   if (isResponse(user)) return user;
 
-  const db = getDb();
-  const org = db
+  const db = await getDbAsync();
+  const org = await db
     .prepare<{ id: string; name: string; slug: string }>(
       "SELECT id, name, slug FROM organizations WHERE id = ?",
     )

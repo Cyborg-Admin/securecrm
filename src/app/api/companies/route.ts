@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { upsertCompany } from "@/lib/companies";
 
 const schema = z.object({
@@ -16,7 +16,7 @@ const schema = z.object({
 export async function GET(req: NextRequest) {
   const user = await requireUser(req, "companies:read");
   if (isResponse(user)) return user;
-  const db = getDb();
+  const db = await getDbAsync();
   const q = req.nextUrl.searchParams.get("q")?.trim();
   let sql = `SELECT c.*,
       (SELECT COUNT(*) FROM leads l WHERE l.company_id = c.id) as lead_count,
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     params.push(`%${q}%`, `%${q}%`, `%${q}%`);
   }
   sql += " ORDER BY c.updated_at DESC LIMIT 100";
-  return json({ companies: db.prepare(sql).all(...params) });
+  return json({ companies: await db.prepare(sql).all(...params) });
 }
 
 export async function POST(req: NextRequest) {
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   }
   const parsed = schema.safeParse(body);
   if (!parsed.success) return error("Validation failed", 400);
-  const result = upsertCompany({
+  const result = await upsertCompany({
     organizationId: user.organization_id,
     actorUserId: user.id,
     ...parsed.data,

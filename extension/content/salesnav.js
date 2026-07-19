@@ -159,8 +159,21 @@
       document.documentElement.appendChild(bar);
       bar.querySelector("#scrm-sn-one").onclick = async () => {
         try {
-          const lead = scrapeProfile();
-          if (!lead) return SecureCRMPanel.setStatus("Could not parse Sales Nav profile.");
+          const scraped = scrapeProfile();
+          const lead = await SecureCRMForm.showLeadForm(
+            scraped || {
+              linkedinUrl: SecureCRM.normalizeLinkedIn(location.href),
+              fullName: "",
+              jobTitle: null,
+              companyName: null,
+              industry: null,
+              website: null,
+              location: null,
+              headline: null,
+              metadata: { page: "salesnav_manual" },
+            },
+          );
+          if (!lead) return;
           const res = await SecureCRM.captureLeads({
             source: SOURCE,
             sourceUrl: location.href,
@@ -186,13 +199,16 @@
       bar.querySelector("#scrm-sn-page").onclick = async () => {
         try {
           const leads = scrapeSearchResults();
-          const res = await SecureCRM.captureLeads({
-            source: SOURCE,
-            sourceUrl: location.href,
-            startBatch: true,
-            finishBatch: true,
+          if (!leads.length) {
+            SecureCRMPanel.setStatus("No Sales Nav rows found on this page.");
+            return;
+          }
+          const res = await SecureCRMForm.captureManyWithForm(
+            SOURCE,
+            location.href,
             leads,
-          });
+            { startBatch: true, finishBatch: true },
+          );
           SecureCRMPanel.setStatus(`Saved page: ${res.created} new, ${res.updated} updated`);
         } catch (e) {
           SecureCRMPanel.setStatus(e.message);

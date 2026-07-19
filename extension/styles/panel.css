@@ -112,3 +112,88 @@
   background: #0a0a0a;
   color: #ffffff;
 }
+
+#securecrm-form {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
+  color: #0a0a0a;
+}
+
+#securecrm-form.scrm-open {
+  display: flex;
+}
+
+#securecrm-form .scrm-form-card {
+  width: min(420px, 100%);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+#securecrm-form .scrm-form-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #737373;
+}
+
+#securecrm-form .scrm-form-fields {
+  display: grid;
+  gap: 8px;
+}
+
+#securecrm-form .scrm-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+#securecrm-form .scrm-field span {
+  color: #737373;
+}
+
+#securecrm-form .scrm-field input {
+  width: 100%;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #0a0a0a;
+}
+
+#securecrm-form .scrm-field-miss input {
+  border-color: #0a0a0a;
+  background: #fafafa;
+}
+
+#securecrm-form .scrm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+#securecrm-form .scrm-btn {
+  border: 1px solid #0a0a0a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: #ffffff;
+  font-size: 12px;
+  color: #0a0a0a;
+}
+
+#securecrm-form .scrm-btn-primary {
+  background: #0a0a0a;
+  color: #ffffff;
+}

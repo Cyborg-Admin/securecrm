@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { writeAudit } from "@/lib/audit";
 
@@ -16,8 +16,8 @@ const createSchema = z.object({
 export async function GET(req: NextRequest) {
   const user = await requireUser(req, "users:read");
   if (isResponse(user)) return user;
-  const db = getDb();
-  const users = db
+  const db = await getDbAsync();
+  const users = await db
     .prepare(
       `SELECT u.id, u.email, u.full_name, u.is_active, u.last_login_at, u.created_at,
               GROUP_CONCAT(r.name, ',') as roles
@@ -45,54 +45,56 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return error("Validation failed", 400);
 
-  const db = getDb();
+  const db = await getDbAsync();
   const email = parsed.data.email.toLowerCase();
-  const exists = db
-    .prepare(
-      "SELECT id FROM users WHERE organization_id = ? AND email = ?",
-    )
+  const exists = await db
+    .prepare("SELECT id FROM users WHERE organization_id = ? AND email = ?")
     .get(user.organization_id, email);
   if (exists) return error("User already exists", 409);
 
   const id = newId();
   const hash = bcrypt.hashSync(parsed.data.password, 12);
-  db.prepare(
-    `INSERT INTO users (id, organization_id, email, password_hash, full_name)
+  await db
+    .prepare(
+      `INSERT INTO users (id, organization_id, email, password_hash, full_name)
      VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, user.organization_id, email, hash, parsed.data.fullName);
+    )
+    .run(id, user.organization_id, email, hash, parsed.data.fullName);
 
-  const role = db
+  const role = await db
     .prepare<{ id: string }>(
       "SELECT id FROM roles WHERE organization_id = ? AND name = ?",
     )
     .get(user.organization_id, parsed.data.roleName);
 
   if (role && user.permissions.includes("users:assign_roles")) {
-    db.prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)").run(
-      id,
-      role.id,
-    );
+    await db
+      .prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)")
+      .run(id, role.id);
   } else if (role) {
-    const rep = db
+    const rep = await db
       .prepare<{ id: string }>(
         "SELECT id FROM roles WHERE organization_id = ? AND name = 'Rep'",
       )
       .get(user.organization_id);
     if (rep) {
-      db.prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)").run(
-        id,
-        rep.id,
-      );
+      await db
+        .prepare("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)")
+        .run(id, rep.id);
     }
   }
 
-  writeAudit({
+  await writeAudit({
     organizationId: user.organization_id,
     actorUserId: user.id,
     action: "user.created",
     entityType: "user",
     entityId: id,
-    after: { email, fullName: parsed.data.fullName, role: parsed.data.roleName },
+    after: {
+      email,
+      fullName: parsed.data.fullName,
+      role: parsed.data.roleName,
+    },
   });
 
   return json({ id, email, fullName: parsed.data.fullName }, 201);

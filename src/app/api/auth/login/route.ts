@@ -10,7 +10,7 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  bootstrapApp();
+  await bootstrapApp();
   let body: unknown;
   try {
     body = await req.json();

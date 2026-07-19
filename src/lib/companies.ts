@@ -1,7 +1,8 @@
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { normalizeCompanyName, normalizeDomain } from "@/lib/normalize";
 import { writeAudit } from "@/lib/audit";
+import { parseJsonObject } from "@/lib/json";
 
 export type CompanyRow = {
   id: string;
@@ -19,16 +20,16 @@ export type CompanyRow = {
   metadata_json: string;
 };
 
-export function findCompanyDuplicate(input: {
+export async function findCompanyDuplicate(input: {
   organizationId: string;
   name?: string | null;
   website?: string | null;
   domain?: string | null;
-}): CompanyRow | null {
-  const db = getDb();
+}): Promise<CompanyRow | null> {
+  const db = await getDbAsync();
   const domain = normalizeDomain(input.domain || input.website);
   if (domain) {
-    const byDomain = db
+    const byDomain = await db
       .prepare<CompanyRow>(
         `SELECT * FROM companies
          WHERE organization_id = ? AND domain_normalized = ?
@@ -41,20 +42,20 @@ export function findCompanyDuplicate(input: {
     const normalized = normalizeCompanyName(input.name);
     if (normalized) {
       return (
-        db
+        (await db
           .prepare<CompanyRow>(
             `SELECT * FROM companies
              WHERE organization_id = ? AND name_normalized = ?
              LIMIT 1`,
           )
-          .get(input.organizationId, normalized) || null
+          .get(input.organizationId, normalized)) || null
       );
     }
   }
   return null;
 }
 
-export function upsertCompany(input: {
+export async function upsertCompany(input: {
   organizationId: string;
   actorUserId: string;
   name: string;
@@ -65,9 +66,9 @@ export function upsertCompany(input: {
   location?: string | null;
   ownerUserId?: string | null;
   metadata?: Record<string, unknown>;
-}): { company: CompanyRow; created: boolean } {
-  const db = getDb();
-  const existing = findCompanyDuplicate({
+}): Promise<{ company: CompanyRow; created: boolean }> {
+  const db = await getDbAsync();
+  const existing = await findCompanyDuplicate({
     organizationId: input.organizationId,
     name: input.name,
     website: input.website,
@@ -75,11 +76,12 @@ export function upsertCompany(input: {
 
   if (existing) {
     const nextMeta = {
-      ...JSON.parse(existing.metadata_json || "{}"),
+      ...parseJsonObject(existing.metadata_json),
       ...(input.metadata || {}),
     };
-    db.prepare(
-      `UPDATE companies SET
+    await db
+      .prepare(
+        `UPDATE companies SET
          industry = COALESCE(?, industry),
          website = COALESCE(?, website),
          domain = COALESCE(?, domain),
@@ -90,54 +92,57 @@ export function upsertCompany(input: {
          metadata_json = ?,
          updated_at = datetime('now')
        WHERE id = ? AND organization_id = ?`,
-    ).run(
-      input.industry ?? null,
-      input.website ?? null,
-      normalizeDomain(input.website),
-      normalizeDomain(input.website),
-      input.linkedinUrl ?? null,
-      input.employeeCount ?? null,
-      input.location ?? null,
-      JSON.stringify(nextMeta),
-      existing.id,
-      input.organizationId,
-    );
-    const company = db
+      )
+      .run(
+        input.industry ?? null,
+        input.website ?? null,
+        normalizeDomain(input.website),
+        normalizeDomain(input.website),
+        input.linkedinUrl ?? null,
+        input.employeeCount ?? null,
+        input.location ?? null,
+        JSON.stringify(nextMeta),
+        existing.id,
+        input.organizationId,
+      );
+    const company = (await db
       .prepare<CompanyRow>("SELECT * FROM companies WHERE id = ?")
-      .get(existing.id)!;
+      .get(existing.id))!;
     return { company, created: false };
   }
 
   const id = newId();
   const domain = normalizeDomain(input.website);
-  db.prepare(
-    `INSERT INTO companies
+  await db
+    .prepare(
+      `INSERT INTO companies
      (id, organization_id, name, name_normalized, domain, domain_normalized,
       industry, website, linkedin_url, employee_count, location, owner_user_id,
       metadata_json, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    input.organizationId,
-    input.name.trim(),
-    normalizeCompanyName(input.name),
-    domain,
-    domain,
-    input.industry ?? null,
-    input.website ?? null,
-    input.linkedinUrl ?? null,
-    input.employeeCount ?? null,
-    input.location ?? null,
-    input.ownerUserId ?? input.actorUserId,
-    JSON.stringify(input.metadata || {}),
-    input.actorUserId,
-  );
+    )
+    .run(
+      id,
+      input.organizationId,
+      input.name.trim(),
+      normalizeCompanyName(input.name),
+      domain,
+      domain,
+      input.industry ?? null,
+      input.website ?? null,
+      input.linkedinUrl ?? null,
+      input.employeeCount ?? null,
+      input.location ?? null,
+      input.ownerUserId ?? input.actorUserId,
+      JSON.stringify(input.metadata || {}),
+      input.actorUserId,
+    );
 
-  const company = db
+  const company = (await db
     .prepare<CompanyRow>("SELECT * FROM companies WHERE id = ?")
-    .get(id)!;
+    .get(id))!;
 
-  writeAudit({
+  await writeAudit({
     organizationId: input.organizationId,
     actorUserId: input.actorUserId,
     action: "company.created",

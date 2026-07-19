@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SecureCRM Lead Capture",
   "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to SecureCRM.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "http://localhost:3000/*",
@@ -24,12 +24,19 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.linkedin.com/search/results/people/*",
-        "https://www.linkedin.com/in/*",
-        "https://linkedin.com/search/results/people/*",
-        "https://linkedin.com/in/*"
+        "https://www.linkedin.com/*",
+        "https://linkedin.com/*"
       ],
-      "js": ["shared/crm-api.js", "shared/panel.js", "content/linkedin.js"],
+      "exclude_matches": [
+        "https://www.linkedin.com/sales/*",
+        "https://linkedin.com/sales/*"
+      ],
+      "js": [
+        "shared/crm-api.js",
+        "shared/panel.js",
+        "shared/form.js",
+        "content/linkedin.js"
+      ],
       "css": ["styles/panel.css"],
       "run_at": "document_idle"
     },
@@ -38,7 +45,12 @@
         "https://www.linkedin.com/sales/*",
         "https://linkedin.com/sales/*"
       ],
-      "js": ["shared/crm-api.js", "shared/panel.js", "content/salesnav.js"],
+      "js": [
+        "shared/crm-api.js",
+        "shared/panel.js",
+        "shared/form.js",
+        "content/salesnav.js"
+      ],
       "css": ["styles/panel.css"],
       "run_at": "document_idle"
     },
@@ -47,13 +59,23 @@
         "https://*.cognism.com/*",
         "https://app.cognism.com/*"
       ],
-      "js": ["shared/crm-api.js", "shared/panel.js", "content/cognism.js"],
+      "js": [
+        "shared/crm-api.js",
+        "shared/panel.js",
+        "shared/form.js",
+        "content/cognism.js"
+      ],
       "css": ["styles/panel.css"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://mail.google.com/*"],
-      "js": ["shared/crm-api.js", "shared/panel.js", "content/gmail.js"],
+      "js": [
+        "shared/crm-api.js",
+        "shared/panel.js",
+        "shared/form.js",
+        "content/gmail.js"
+      ],
       "css": ["styles/panel.css"],
       "run_at": "document_idle"
     }

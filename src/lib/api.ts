@@ -23,7 +23,7 @@ export async function requireUser(
   req: NextRequest,
   permission?: PermissionCode,
 ): Promise<AuthUser | NextResponse> {
-  bootstrapApp();
+  await bootstrapApp();
 
   const apiKey =
     req.headers.get("x-api-key") ||
@@ -31,11 +31,11 @@ export async function requireUser(
 
   let user: AuthUser | null = null;
   if (apiKey?.startsWith("scrm_")) {
-    user = getUserFromApiKey(apiKey);
+    user = await getUserFromApiKey(apiKey);
   } else {
     const cookieToken = req.cookies.get(SESSION_COOKIE)?.value;
     user = cookieToken
-      ? getUserFromSessionToken(cookieToken)
+      ? await getUserFromSessionToken(cookieToken)
       : await getSessionUser();
   }
 

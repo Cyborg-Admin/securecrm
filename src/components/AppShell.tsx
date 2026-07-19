@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client-api";
+import { QuickFab } from "@/components/QuickFab";
 
 type MeResponse = {
   user: {
@@ -19,6 +20,7 @@ type MeResponse = {
 const NAV = [
   { href: "/dashboard", label: "Dashboard", perm: "leads:read" },
   { href: "/leads", label: "Leads", perm: "leads:read" },
+  { href: "/contacts", label: "Contacts", perm: "contacts:read" },
   { href: "/companies", label: "Companies", perm: "companies:read" },
   { href: "/automations", label: "Automations", perm: "automations:read" },
   { href: "/team", label: "Team", perm: "users:read" },
@@ -107,7 +109,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Dynamic workspace
           </div>
         </header>
-        <main className="flex-1 px-4 pb-8 md:px-6">{children}</main>
+        <main className="flex-1 px-4 pb-24 md:px-6">{children}</main>
+        <QuickFab />
       </div>
     </div>
   );

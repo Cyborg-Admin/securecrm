@@ -1,11 +1,12 @@
 import { createHash, timingSafeEqual } from "crypto";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { newId, newToken } from "@/lib/ids";
 import { writeAudit } from "@/lib/audit";
 import type { PermissionCode } from "@/lib/permissions";
 import { bootstrapApp } from "@/lib/bootstrap";
+import { parseJsonArray } from "@/lib/json";
 
 export const SESSION_COOKIE = "scrm_session";
 export const CSRF_COOKIE = "scrm_csrf";
@@ -35,17 +36,17 @@ export async function loginUser(input: {
   ipAddress?: string | null;
   userAgent?: string | null;
 }): Promise<{ user: AuthUser; sessionToken: string; csrfToken: string } | null> {
-  bootstrapApp();
-  const db = getDb();
+  await bootstrapApp();
+  const db = await getDbAsync();
   const email = input.email.trim().toLowerCase();
-  const user = db
+  const user = await db
     .prepare<{
       id: string;
       organization_id: string;
       email: string;
       full_name: string;
       password_hash: string;
-      is_active: number;
+      is_active: number | boolean;
     }>(
       `SELECT id, organization_id, email, full_name, password_hash, is_active
        FROM users WHERE email = ? LIMIT 1`,
@@ -61,26 +62,28 @@ export async function loginUser(input: {
   const sessionId = newId();
   const expires = new Date(Date.now() + sessionDays() * 86400000).toISOString();
 
-  db.prepare(
-    `INSERT INTO sessions
+  await db
+    .prepare(
+      `INSERT INTO sessions
      (id, user_id, organization_id, token_hash, csrf_secret, expires_at, ip_address, user_agent)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    sessionId,
-    user.id,
-    user.organization_id,
-    hashToken(sessionToken),
-    csrfSecret,
-    expires,
-    input.ipAddress ?? null,
-    input.userAgent ?? null,
-  );
+    )
+    .run(
+      sessionId,
+      user.id,
+      user.organization_id,
+      hashToken(sessionToken),
+      csrfSecret,
+      expires,
+      input.ipAddress ?? null,
+      input.userAgent ?? null,
+    );
 
-  db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(
-    user.id,
-  );
+  await db
+    .prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?")
+    .run(user.id);
 
-  writeAudit({
+  await writeAudit({
     organizationId: user.organization_id,
     actorUserId: user.id,
     action: "auth.login",
@@ -90,55 +93,59 @@ export async function loginUser(input: {
     userAgent: input.userAgent,
   });
 
-  const authUser = loadAuthUser(user.id, sessionId, csrfSecret);
+  const authUser = await loadAuthUser(user.id, sessionId, csrfSecret);
   if (!authUser) return null;
   return { user: authUser, sessionToken, csrfToken: csrfSecret };
 }
 
-export function logoutSession(sessionToken: string): void {
-  const db = getDb();
-  db.prepare(
-    "UPDATE sessions SET revoked_at = datetime('now') WHERE token_hash = ?",
-  ).run(hashToken(sessionToken));
+export async function logoutSession(sessionToken: string): Promise<void> {
+  const db = await getDbAsync();
+  await db
+    .prepare(
+      "UPDATE sessions SET revoked_at = datetime('now') WHERE token_hash = ?",
+    )
+    .run(hashToken(sessionToken));
 }
 
-function loadAuthUser(
+async function loadAuthUser(
   userId: string,
   sessionId: string,
   csrfSecret: string,
-): AuthUser | null {
-  const db = getDb();
-  const user = db
+): Promise<AuthUser | null> {
+  const db = await getDbAsync();
+  const user = await db
     .prepare<{
       id: string;
       organization_id: string;
       email: string;
       full_name: string;
-      is_active: number;
+      is_active: number | boolean;
     }>(
       `SELECT id, organization_id, email, full_name, is_active FROM users WHERE id = ?`,
     )
     .get(userId);
   if (!user || !user.is_active) return null;
 
-  const roles = db
-    .prepare<{ name: string }>(
-      `SELECT r.name FROM roles r
+  const roles = (
+    await db
+      .prepare<{ name: string }>(
+        `SELECT r.name FROM roles r
        INNER JOIN user_roles ur ON ur.role_id = r.id
        WHERE ur.user_id = ?`,
-    )
-    .all(userId)
-    .map((r) => r.name);
+      )
+      .all(userId)
+  ).map((r) => r.name);
 
-  const permissions = db
-    .prepare<{ code: string }>(
-      `SELECT DISTINCT p.code FROM permissions p
+  const permissions = (
+    await db
+      .prepare<{ code: string }>(
+        `SELECT DISTINCT p.code FROM permissions p
        INNER JOIN role_permissions rp ON rp.permission_id = p.id
        INNER JOIN user_roles ur ON ur.role_id = rp.role_id
        WHERE ur.user_id = ?`,
-    )
-    .all(userId)
-    .map((p) => p.code as PermissionCode);
+      )
+      .all(userId)
+  ).map((p) => p.code as PermissionCode);
 
   return {
     id: user.id,
@@ -153,16 +160,18 @@ function loadAuthUser(
 }
 
 export async function getSessionUser(): Promise<AuthUser | null> {
-  bootstrapApp();
+  await bootstrapApp();
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return getUserFromSessionToken(token);
 }
 
-export function getUserFromSessionToken(token: string): AuthUser | null {
-  const db = getDb();
-  const row = db
+export async function getUserFromSessionToken(
+  token: string,
+): Promise<AuthUser | null> {
+  const db = await getDbAsync();
+  const row = await db
     .prepare<{
       id: string;
       user_id: string;
@@ -180,11 +189,11 @@ export function getUserFromSessionToken(token: string): AuthUser | null {
   return loadAuthUser(row.user_id, row.id, row.csrf_secret);
 }
 
-export function getUserFromApiKey(apiKey: string): AuthUser | null {
-  bootstrapApp();
-  const db = getDb();
+export async function getUserFromApiKey(apiKey: string): Promise<AuthUser | null> {
+  await bootstrapApp();
+  const db = await getDbAsync();
   const keyHash = hashToken(apiKey);
-  const row = db
+  const row = await db
     .prepare<{
       user_id: string;
       organization_id: string;
@@ -197,14 +206,14 @@ export function getUserFromApiKey(apiKey: string): AuthUser | null {
     .get(keyHash);
   if (!row || row.revoked_at) return null;
 
-  db.prepare(
-    "UPDATE api_keys SET last_used_at = datetime('now') WHERE key_hash = ?",
-  ).run(keyHash);
+  await db
+    .prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE key_hash = ?")
+    .run(keyHash);
 
-  const user = loadAuthUser(row.user_id, `api:${row.user_id}`, "api-key");
+  const user = await loadAuthUser(row.user_id, `api:${row.user_id}`, "api-key");
   if (!user) return null;
 
-  const scopes = JSON.parse(row.scopes_json || "[]") as PermissionCode[];
+  const scopes = parseJsonArray<PermissionCode>(row.scopes_json);
   // API keys are scoped — intersect with user permissions
   user.permissions = user.permissions.filter((p) => scopes.includes(p));
   return user;

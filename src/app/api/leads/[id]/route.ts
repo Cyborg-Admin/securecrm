@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
 import { assignOwner } from "@/lib/leads";
 
@@ -24,8 +24,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const user = await requireUser(req, "leads:read");
   if (isResponse(user)) return user;
   const { id } = await ctx.params;
-  const db = getDb();
-  const lead = db
+  const db = await getDbAsync();
+  const lead = await db
     .prepare(
       `SELECT l.*, u.full_name as owner_name, c.name as company_display
        FROM leads l
@@ -42,11 +42,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const user = await requireUser(req, "leads:write");
   if (isResponse(user)) return user;
   const { id } = await ctx.params;
-  const db = getDb();
+  const db = await getDbAsync();
 
-  const existing = db
+  const existing = (await db
     .prepare("SELECT * FROM leads WHERE id = ? AND organization_id = ?")
-    .get(id, user.organization_id) as Record<string, unknown> | undefined;
+    .get(id, user.organization_id)) as Record<string, unknown> | undefined;
   if (!existing) return error("Lead not found", 404);
 
   let body: unknown;
@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (d.ownerUserId && d.ownerUserId !== existing.owner_user_id) {
     const canAssign = user.permissions.includes("leads:assign");
     if (!canAssign) return error("Forbidden", 403, { permission: "leads:assign" });
-    assignOwner({
+    await assignOwner({
       organizationId: user.organization_id,
       actorUserId: user.id,
       entityType: "lead",
@@ -71,8 +71,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     });
   }
 
-  db.prepare(
-    `UPDATE leads SET
+  await db
+    .prepare(
+      `UPDATE leads SET
        full_name = COALESCE(?, full_name),
        job_title = COALESCE(?, job_title),
        company_name = COALESCE(?, company_name),
@@ -84,25 +85,24 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
        metadata_json = COALESCE(?, metadata_json),
        updated_at = datetime('now')
      WHERE id = ? AND organization_id = ?`,
-  ).run(
-    d.fullName ?? null,
-    d.jobTitle ?? null,
-    d.companyName ?? null,
-    d.industry ?? null,
-    d.website ?? null,
-    d.location ?? null,
-    d.headline ?? null,
-    d.status ?? null,
-    d.metadata ? JSON.stringify(d.metadata) : null,
-    id,
-    user.organization_id,
-  );
+    )
+    .run(
+      d.fullName ?? null,
+      d.jobTitle ?? null,
+      d.companyName ?? null,
+      d.industry ?? null,
+      d.website ?? null,
+      d.location ?? null,
+      d.headline ?? null,
+      d.status ?? null,
+      d.metadata ? JSON.stringify(d.metadata) : null,
+      id,
+      user.organization_id,
+    );
 
-  const lead = db
-    .prepare("SELECT * FROM leads WHERE id = ?")
-    .get(id);
+  const lead = await db.prepare("SELECT * FROM leads WHERE id = ?").get(id);
 
-  writeAudit({
+  await writeAudit({
     organizationId: user.organization_id,
     actorUserId: user.id,
     action: "lead.patched",

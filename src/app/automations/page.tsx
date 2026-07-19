@@ -46,7 +46,13 @@ export default function AutomationsPage() {
               Trigger: <strong>{a.trigger_type}</strong>
             </p>
             <pre className="neo-inset mt-3 overflow-auto p-3 text-xs">
-              {JSON.stringify(JSON.parse(a.actions_json || "[]"), null, 2)}
+              {JSON.stringify(
+                typeof a.actions_json === "string"
+                  ? JSON.parse(a.actions_json || "[]")
+                  : a.actions_json || [],
+                null,
+                2,
+              )}
             </pre>
             <p className="mt-3 text-xs text-[var(--neo-muted)]">{a.run_count} runs</p>
           </li>

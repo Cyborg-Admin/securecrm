@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { normalizeLinkedInUid } from "@/lib/normalize";
 
 export type MatchCandidate = {
@@ -27,21 +27,21 @@ function scoreName(a: string, b: string): number {
 }
 
 /** Find best CRM match for an open Gmail message / person stub. */
-export function matchPerson(input: {
+export async function matchPerson(input: {
   organizationId: string;
   fullName?: string | null;
   email?: string | null;
   linkedinUrl?: string | null;
   companyName?: string | null;
-}): MatchCandidate[] {
-  const db = getDb();
+}): Promise<MatchCandidate[]> {
+  const db = await getDbAsync();
   const candidates: MatchCandidate[] = [];
   const linkedinUid = input.linkedinUrl
     ? normalizeLinkedInUid(input.linkedinUrl)
     : null;
 
   if (linkedinUid) {
-    const contact = db
+    const contact = await db
       .prepare<{
         id: string;
         full_name: string;
@@ -70,7 +70,7 @@ export function matchPerson(input: {
       });
     }
 
-    const lead = db
+    const lead = await db
       .prepare<{
         id: string;
         full_name: string;
@@ -101,7 +101,7 @@ export function matchPerson(input: {
 
   if (input.email) {
     const email = input.email.trim().toLowerCase();
-    const contact = db
+    const contact = await db
       .prepare<{
         id: string;
         full_name: string;
@@ -132,7 +132,7 @@ export function matchPerson(input: {
 
   if (input.fullName?.trim()) {
     const name = input.fullName.trim();
-    const leads = db
+    const leads = await db
       .prepare<{
         id: string;
         full_name: string;
@@ -176,7 +176,7 @@ export function matchPerson(input: {
       }
     }
 
-    const contacts = db
+    const contacts = await db
       .prepare<{
         id: string;
         full_name: string;

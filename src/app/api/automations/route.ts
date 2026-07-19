@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { writeAudit } from "@/lib/audit";
 
@@ -17,8 +17,8 @@ const schema = z.object({
 export async function GET(req: NextRequest) {
   const user = await requireUser(req, "automations:read");
   if (isResponse(user)) return user;
-  const db = getDb();
-  const automations = db
+  const db = await getDbAsync();
+  const automations = await db
     .prepare(
       `SELECT a.*,
         (SELECT COUNT(*) FROM automation_runs r WHERE r.automation_id = a.id) as run_count
@@ -43,24 +43,35 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return error("Validation failed", 400);
 
   const id = newId();
-  const db = getDb();
-  db.prepare(
-    `INSERT INTO automations
+  const db = await getDbAsync();
+  const isActive =
+    parsed.data.isActive === false
+      ? db.driver === "postgres"
+        ? false
+        : 0
+      : db.driver === "postgres"
+        ? true
+        : 1;
+
+  await db
+    .prepare(
+      `INSERT INTO automations
      (id, organization_id, name, description, trigger_type, trigger_config, actions_json, is_active, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    user.organization_id,
-    parsed.data.name,
-    parsed.data.description ?? null,
-    parsed.data.triggerType,
-    JSON.stringify(parsed.data.triggerConfig || {}),
-    JSON.stringify(parsed.data.actions),
-    parsed.data.isActive === false ? 0 : 1,
-    user.id,
-  );
+    )
+    .run(
+      id,
+      user.organization_id,
+      parsed.data.name,
+      parsed.data.description ?? null,
+      parsed.data.triggerType,
+      JSON.stringify(parsed.data.triggerConfig || {}),
+      JSON.stringify(parsed.data.actions),
+      isActive,
+      user.id,
+    );
 
-  writeAudit({
+  await writeAudit({
     organizationId: user.organization_id,
     actorUserId: user.id,
     action: "automation.created",

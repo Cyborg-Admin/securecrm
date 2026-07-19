@@ -1,9 +1,10 @@
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { normalizeLinkedInUid, splitName } from "@/lib/normalize";
 import { upsertCompany } from "@/lib/companies";
 import { writeAudit } from "@/lib/audit";
 import { runAutomations } from "@/lib/automation";
+import { parseJsonObject } from "@/lib/json";
 
 export type LeadCaptureInput = {
   organizationId: string;
@@ -44,12 +45,12 @@ export type LeadRow = {
   metadata_json: string;
 };
 
-export function captureLead(input: LeadCaptureInput): {
+export async function captureLead(input: LeadCaptureInput): Promise<{
   lead: LeadRow;
   created: boolean;
   companyId: string | null;
-} {
-  const db = getDb();
+}> {
+  const db = await getDbAsync();
   const linkedinUid = normalizeLinkedInUid(input.linkedinUrl);
   if (!linkedinUid || !input.fullName.trim()) {
     throw new Error("VALIDATION:linkedin_uid and full_name are required");
@@ -57,7 +58,7 @@ export function captureLead(input: LeadCaptureInput): {
 
   let companyId: string | null = null;
   if (input.companyName?.trim()) {
-    const { company } = upsertCompany({
+    const { company } = await upsertCompany({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       name: input.companyName,
@@ -70,7 +71,7 @@ export function captureLead(input: LeadCaptureInput): {
     companyId = company.id;
   }
 
-  const existing = db
+  const existing = await db
     .prepare<LeadRow>(
       `SELECT * FROM leads WHERE organization_id = ? AND linkedin_uid = ?`,
     )
@@ -82,12 +83,13 @@ export function captureLead(input: LeadCaptureInput): {
   if (existing) {
     const before = { ...existing };
     const nextMeta = {
-      ...JSON.parse(existing.metadata_json || "{}"),
+      ...parseJsonObject(existing.metadata_json),
       ...(input.metadata || {}),
       last_source: input.source,
     };
-    db.prepare(
-      `UPDATE leads SET
+    await db
+      .prepare(
+        `UPDATE leads SET
          full_name = ?,
          first_name = ?,
          last_name = ?,
@@ -103,29 +105,30 @@ export function captureLead(input: LeadCaptureInput): {
          metadata_json = ?,
          updated_at = datetime('now')
        WHERE id = ? AND organization_id = ?`,
-    ).run(
-      input.fullName.trim(),
-      names.first_name,
-      names.last_name,
-      input.jobTitle ?? null,
-      companyId,
-      input.companyName ?? null,
-      input.industry ?? null,
-      input.website ?? null,
-      input.location ?? null,
-      input.headline ?? null,
-      input.source,
-      input.sourceUrl ?? null,
-      JSON.stringify(nextMeta),
-      existing.id,
-      input.organizationId,
-    );
+      )
+      .run(
+        input.fullName.trim(),
+        names.first_name,
+        names.last_name,
+        input.jobTitle ?? null,
+        companyId,
+        input.companyName ?? null,
+        input.industry ?? null,
+        input.website ?? null,
+        input.location ?? null,
+        input.headline ?? null,
+        input.source,
+        input.sourceUrl ?? null,
+        JSON.stringify(nextMeta),
+        existing.id,
+        input.organizationId,
+      );
 
-    const lead = db
+    const lead = (await db
       .prepare<LeadRow>("SELECT * FROM leads WHERE id = ?")
-      .get(existing.id)!;
+      .get(existing.id))!;
 
-    writeAudit({
+    await writeAudit({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       action: "lead.updated",
@@ -139,36 +142,40 @@ export function captureLead(input: LeadCaptureInput): {
   }
 
   const id = newId();
-  db.prepare(
-    `INSERT INTO leads
+  await db
+    .prepare(
+      `INSERT INTO leads
      (id, organization_id, linkedin_uid, full_name, first_name, last_name,
       job_title, company_id, company_name, industry, website, location, headline,
       source, source_url, status, owner_user_id, metadata_json, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
-  ).run(
-    id,
-    input.organizationId,
-    linkedinUid,
-    input.fullName.trim(),
-    names.first_name,
-    names.last_name,
-    input.jobTitle ?? null,
-    companyId,
-    input.companyName ?? null,
-    input.industry ?? null,
-    input.website ?? null,
-    input.location ?? null,
-    input.headline ?? null,
-    input.source,
-    input.sourceUrl ?? null,
-    owner,
-    JSON.stringify({ ...(input.metadata || {}), batch_id: input.batchId || null }),
-    input.actorUserId,
-  );
+    )
+    .run(
+      id,
+      input.organizationId,
+      linkedinUid,
+      input.fullName.trim(),
+      names.first_name,
+      names.last_name,
+      input.jobTitle ?? null,
+      companyId,
+      input.companyName ?? null,
+      input.industry ?? null,
+      input.website ?? null,
+      input.location ?? null,
+      input.headline ?? null,
+      input.source,
+      input.sourceUrl ?? null,
+      owner,
+      JSON.stringify({ ...(input.metadata || {}), batch_id: input.batchId || null }),
+      input.actorUserId,
+    );
 
-  const lead = db.prepare<LeadRow>("SELECT * FROM leads WHERE id = ?").get(id)!;
+  const lead = (await db
+    .prepare<LeadRow>("SELECT * FROM leads WHERE id = ?")
+    .get(id))!;
 
-  writeAudit({
+  await writeAudit({
     organizationId: input.organizationId,
     actorUserId: input.actorUserId,
     action: "lead.created",
@@ -177,7 +184,7 @@ export function captureLead(input: LeadCaptureInput): {
     after: lead,
   });
 
-  runAutomations({
+  await runAutomations({
     organizationId: input.organizationId,
     triggerType: "lead.captured",
     actorUserId: input.actorUserId,
@@ -187,15 +194,15 @@ export function captureLead(input: LeadCaptureInput): {
   return { lead, created: true, companyId };
 }
 
-export function assignOwner(input: {
+export async function assignOwner(input: {
   organizationId: string;
   actorUserId: string;
   entityType: "lead" | "contact" | "company";
   entityId: string;
   toUserId: string;
   reason?: string;
-}): void {
-  const db = getDb();
+}): Promise<void> {
+  const db = await getDbAsync();
   const table =
     input.entityType === "lead"
       ? "leads"
@@ -203,7 +210,7 @@ export function assignOwner(input: {
         ? "contacts"
         : "companies";
 
-  const current = db
+  const current = await db
     .prepare<{ owner_user_id: string | null; organization_id: string }>(
       `SELECT owner_user_id, organization_id FROM ${table} WHERE id = ?`,
     )
@@ -213,27 +220,31 @@ export function assignOwner(input: {
     throw new Error("NOT_FOUND");
   }
 
-  db.prepare(
-    `UPDATE ${table} SET owner_user_id = ?, updated_at = datetime('now')
+  await db
+    .prepare(
+      `UPDATE ${table} SET owner_user_id = ?, updated_at = datetime('now')
      WHERE id = ? AND organization_id = ?`,
-  ).run(input.toUserId, input.entityId, input.organizationId);
+    )
+    .run(input.toUserId, input.entityId, input.organizationId);
 
-  db.prepare(
-    `INSERT INTO ownership_transfers
+  await db
+    .prepare(
+      `INSERT INTO ownership_transfers
      (id, organization_id, entity_type, entity_id, from_user_id, to_user_id, changed_by, reason)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    newId(),
-    input.organizationId,
-    input.entityType,
-    input.entityId,
-    current.owner_user_id,
-    input.toUserId,
-    input.actorUserId,
-    input.reason ?? null,
-  );
+    )
+    .run(
+      newId(),
+      input.organizationId,
+      input.entityType,
+      input.entityId,
+      current.owner_user_id,
+      input.toUserId,
+      input.actorUserId,
+      input.reason ?? null,
+    );
 
-  writeAudit({
+  await writeAudit({
     organizationId: input.organizationId,
     actorUserId: input.actorUserId,
     action: `${input.entityType}.assigned`,

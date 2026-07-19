@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { captureLead } from "@/lib/leads";
 
@@ -23,7 +23,7 @@ const schema = z.object({
   batchId: z.string().uuid().optional().nullable(),
   startBatch: z.boolean().optional(),
   finishBatch: z.boolean().optional(),
-  leads: z.array(leadSchema).min(1).max(100),
+  leads: z.array(leadSchema).max(100).default([]),
 });
 
 export async function POST(req: NextRequest) {
@@ -42,22 +42,38 @@ export async function POST(req: NextRequest) {
     return error("Validation failed", 400, { details: parsed.error.flatten() });
   }
 
-  const db = getDb();
+  const db = await getDbAsync();
   let batchId = parsed.data.batchId || null;
 
-  if (parsed.data.startBatch || !batchId) {
+  if ((parsed.data.startBatch || !batchId) && parsed.data.leads.length > 0) {
     batchId = newId();
-    db.prepare(
-      `INSERT INTO capture_batches
+    await db
+      .prepare(
+        `INSERT INTO capture_batches
        (id, organization_id, user_id, source, source_url, status)
        VALUES (?, ?, ?, ?, ?, 'running')`,
-    ).run(
-      batchId,
-      user.organization_id,
-      user.id,
-      parsed.data.source,
-      parsed.data.sourceUrl ?? null,
-    );
+      )
+      .run(
+        batchId,
+        user.organization_id,
+        user.id,
+        parsed.data.source,
+        parsed.data.sourceUrl ?? null,
+      );
+  }
+
+  if (!parsed.data.leads.length && parsed.data.finishBatch && batchId) {
+    await db
+      .prepare(
+        `UPDATE capture_batches SET status = 'completed', finished_at = datetime('now')
+       WHERE id = ? AND organization_id = ?`,
+      )
+      .run(batchId, user.organization_id);
+    return json({ batchId, created: 0, updated: 0, captured: 0, results: [] });
+  }
+
+  if (!parsed.data.leads.length) {
+    return error("Provide at least one lead, or finishBatch with batchId", 400);
   }
 
   const results: Array<{
@@ -70,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   for (const lead of parsed.data.leads) {
     try {
-      const out = captureLead({
+      const out = await captureLead({
         organizationId: user.organization_id,
         actorUserId: user.id,
         source: parsed.data.source,
@@ -90,23 +106,25 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  db.prepare(
-    `UPDATE capture_batches SET
+  await db
+    .prepare(
+      `UPDATE capture_batches SET
        total_captured = total_captured + ?,
        total_created = total_created + ?,
        total_updated = total_updated + ?,
        status = CASE WHEN ? = 1 THEN 'completed' ELSE status END,
        finished_at = CASE WHEN ? = 1 THEN datetime('now') ELSE finished_at END
      WHERE id = ? AND organization_id = ?`,
-  ).run(
-    results.length,
-    created,
-    updated,
-    parsed.data.finishBatch ? 1 : 0,
-    parsed.data.finishBatch ? 1 : 0,
-    batchId,
-    user.organization_id,
-  );
+    )
+    .run(
+      results.length,
+      created,
+      updated,
+      parsed.data.finishBatch ? 1 : 0,
+      parsed.data.finishBatch ? 1 : 0,
+      batchId,
+      user.organization_id,
+    );
 
   return json({
     batchId,

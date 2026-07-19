@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     return error("Provide fullName, email, or linkedinUrl", 400);
   }
 
-  const matches = matchPerson({
+  const matches = await matchPerson({
     organizationId: user.organization_id,
     ...parsed.data,
   });
