@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "SecureCRM Lead Capture",
+  "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to SecureCRM.",
+  "version": "1.0.0",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://*/*",
+    "https://www.linkedin.com/*",
+    "https://linkedin.com/*",
+    "https://mail.google.com/*",
+    "https://*.cognism.com/*",
+    "https://app.cognism.com/*"
+  ],
+  "action": {
+    "default_title": "SecureCRM Capture",
+    "default_popup": "popup/popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/search/results/people/*",
+        "https://www.linkedin.com/in/*",
+        "https://linkedin.com/search/results/people/*",
+        "https://linkedin.com/in/*"
+      ],
+      "js": ["shared/crm-api.js", "shared/panel.js", "content/linkedin.js"],
+      "css": ["styles/panel.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/sales/*",
+        "https://linkedin.com/sales/*"
+      ],
+      "js": ["shared/crm-api.js", "shared/panel.js", "content/salesnav.js"],
+      "css": ["styles/panel.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.cognism.com/*",
+        "https://app.cognism.com/*"
+      ],
+      "js": ["shared/crm-api.js", "shared/panel.js", "content/cognism.js"],
+      "css": ["styles/panel.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["shared/crm-api.js", "shared/panel.js", "content/gmail.js"],
+      "css": ["styles/panel.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

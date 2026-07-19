@@ -1,0 +1,114 @@
+@import url("https://fonts.cdnfonts.com/css/garet");
+
+#securecrm-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2147483646;
+  width: min(340px, calc(100vw - 24px));
+  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
+  color: #0a0a0a;
+  display: none;
+}
+
+#securecrm-panel.scrm-open {
+  display: block;
+  animation: scrmIn 200ms ease;
+}
+
+@keyframes scrmIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#securecrm-panel .scrm-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e5e5;
+  box-shadow: none;
+  padding: 12px;
+}
+
+#securecrm-panel .scrm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+#securecrm-panel .scrm-head strong {
+  color: #0a0a0a;
+  font-weight: 850;
+}
+
+#securecrm-panel #scrm-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  color: #0a0a0a;
+}
+
+#securecrm-panel .scrm-body {
+  font-size: 13px;
+  line-height: 1.4;
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 10px;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+#securecrm-panel .scrm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#securecrm-panel .scrm-btn {
+  border: 1px solid #0a0a0a;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: #ffffff;
+  font-size: 12px;
+  color: #0a0a0a;
+}
+
+#securecrm-panel .scrm-btn-primary {
+  background: #0a0a0a;
+  color: #ffffff;
+}
+
+.scrm-float-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 2147483645;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+}
+
+.scrm-float-bar button {
+  border: 1px solid #0a0a0a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: #ffffff;
+  font-size: 12px;
+  color: #0a0a0a;
+}
+
+.scrm-float-bar button.primary {
+  background: #0a0a0a;
+  color: #ffffff;
+}

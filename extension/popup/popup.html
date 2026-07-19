@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SecureCRM Extension</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>SecureCRM</h1>
+      <p class="sub">Lead capture · Gmail match</p>
+
+      <label>
+        CRM base URL
+        <input id="apiBase" type="url" placeholder="http://localhost:3000" />
+      </label>
+
+      <label>
+        API key
+        <input id="apiKey" type="password" placeholder="scrm_…" />
+      </label>
+
+      <button id="save" type="button">Save connection</button>
+      <p id="status"></p>
+
+      <ol>
+        <li>Create a key in CRM → Settings</li>
+        <li>Open LinkedIn / Sales Nav / Cognism / Gmail</li>
+        <li>Use the floating capture bar</li>
+      </ol>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

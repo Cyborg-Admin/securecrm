@@ -1,26 +1,191 @@
 @import "tailwindcss";
 
+/* Garet (Type Forward) — free Book/Heavy; not on Google Fonts */
+@font-face {
+  font-family: "Garet";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("https://fonts.cdnfonts.com/s/57477/Garet-Book.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Garet";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("https://fonts.cdnfonts.com/s/57477/Garet-Book.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Garet";
+  font-style: normal;
+  font-weight: 850;
+  font-display: swap;
+  src: url("https://fonts.cdnfonts.com/s/57477/Garet-Heavy.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Garet";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("https://fonts.cdnfonts.com/s/57477/Garet-Heavy.woff") format("woff");
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #0a0a0a;
+  --ink-soft: #171717;
+  --muted: #737373;
+  --line: #e5e5e5;
+  --line-strong: #d4d4d4;
+  --paper: #ffffff;
+  --paper-soft: #fafafa;
+  --danger: #111111;
+  --radius: 10px;
+  --sidebar-width: 260px;
+  --font-display: "Garet", "Segoe UI", sans-serif;
+  --font-body: "Garet", "Segoe UI", sans-serif;
+
+  /* Compat aliases used across components */
+  --neo-text: var(--ink);
+  --neo-muted: var(--muted);
+  --neo-accent: var(--ink);
+  --neo-accent-soft: #f5f5f5;
+  --neo-danger: var(--danger);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background: var(--paper);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.neo-inset,
+.neo-raised,
+.neo-pressed {
+  background: var(--paper);
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+
+.neo-raised {
+  background: var(--paper);
+}
+
+.neo-inset {
+  background: var(--paper-soft);
+}
+
+.neo-pressed {
+  background: #f5f5f5;
+  border-color: var(--ink);
+}
+
+.neo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.neo-btn:hover {
+  background: #f5f5f5;
+}
+
+.neo-btn:active {
+  background: #eeeeee;
+}
+
+.neo-btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.neo-btn-primary:hover {
+  background: var(--ink-soft);
+  color: var(--paper);
+}
+
+.neo-input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  outline: none;
+  color: var(--ink);
+  background: var(--paper);
+  border-radius: 8px;
+}
+
+.neo-input::placeholder {
+  color: #a3a3a3;
+}
+
+.neo-input:focus {
+  border-color: var(--ink);
+}
+
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  font-weight: 850;
+}
+
+.save-pulse {
+  animation: savePulse 1s ease;
+}
+
+@keyframes savePulse {
+  0% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.fade-up {
+  animation: fadeUp 320ms ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 900px) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --sidebar-width: 0px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .save-pulse {
+    animation: none;
+  }
 }

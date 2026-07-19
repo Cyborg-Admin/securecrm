@@ -1,0 +1,14 @@
+node_modules
+.next
+data
+.git
+.env
+.env.local
+.env.*.local
+*.md
+extension
+AGENTS.md
+CLAUDE.md
+.cursor
+agent-transcripts
+npm-debug.log*
