@@ -97,74 +97,112 @@ export async function bootstrapApp(): Promise<void> {
 }
 
 /** Ensure Louis (and optional BOOTSTRAP_ADMIN_EMAIL) exist as Admin. */
-async function ensurePrimaryAdmin(): Promise<void> {
+export async function ensurePrimaryAdmin(): Promise<{
+  orgId: string | null;
+  ensured: Array<{ email: string; userId: string; created: boolean }>;
+}> {
   const db = await getDbAsync();
   const boolTrue = db.driver === "postgres" ? true : 1;
 
-  const org = await db
+  let org = await db
     .prepare<{ id: string }>(
       "SELECT id FROM organizations ORDER BY created_at ASC LIMIT 1",
     )
     .get();
-  if (!org) return;
+
+  // Recover from empty tenant tables (schema exists but seed never stuck).
+  if (!org) {
+    const orgId = newId();
+    const orgName = process.env.BOOTSTRAP_ORG_NAME || "Cyborg Group";
+    const orgSlug = process.env.BOOTSTRAP_ORG_SLUG || "cyborg";
+    await db
+      .prepare("INSERT INTO organizations (id, name, slug) VALUES (?, ?, ?)")
+      .run(orgId, orgName, orgSlug);
+    org = { id: orgId };
+    console.info("[bootstrap] created organization", orgId);
+  }
 
   await seedRolesForOrg(org.id);
 
-  const ensured = [
+  const ensuredEmails = [
     {
       email: "louis@cyborggroup.com",
       fullName: "Louis",
+      magicOnly: true,
     },
     {
       email: (
-        process.env.BOOTSTRAP_ADMIN_EMAIL || "admin@example.com"
+        process.env.BOOTSTRAP_ADMIN_EMAIL || "louis@cyborggroup.com"
       ).toLowerCase(),
-      fullName: process.env.BOOTSTRAP_ADMIN_NAME || "System Admin",
+      fullName: process.env.BOOTSTRAP_ADMIN_NAME || "Louis",
+      magicOnly: false,
     },
   ];
 
-  // Deduplicate by email
   const seen = new Set<string>();
-  for (const entry of ensured) {
+  const results: Array<{ email: string; userId: string; created: boolean }> =
+    [];
+
+  for (const entry of ensuredEmails) {
     const email = entry.email.trim().toLowerCase();
     if (!email || seen.has(email)) continue;
     seen.add(email);
 
     let user = await db
-      .prepare<{ id: string }>(
-        "SELECT id FROM users WHERE lower(email) = ? LIMIT 1",
+      .prepare<{ id: string; is_active: number | boolean | string }>(
+        "SELECT id, is_active FROM users WHERE lower(email) = lower(?) LIMIT 1",
       )
       .get(email);
 
+    let created = false;
     if (!user) {
       const userId = newId();
-      // Unusable password marker — sign in via magic link (or set password later).
       const password =
-        email === "louis@cyborggroup.com"
+        entry.magicOnly || email === "louis@cyborggroup.com"
           ? `!magic:${newId()}`
           : process.env.BOOTSTRAP_ADMIN_PASSWORD || "ChangeMeNow!23";
       const hash = password.startsWith("!")
         ? password
         : bcrypt.hashSync(password, 12);
 
-      await db
-        .prepare(
-          `INSERT INTO users (id, organization_id, email, password_hash, full_name, is_active)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .run(userId, org.id, email, hash, entry.fullName, boolTrue);
-      user = { id: userId };
+      try {
+        await db
+          .prepare(
+            `INSERT INTO users (id, organization_id, email, password_hash, full_name, is_active)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+          .run(userId, org.id, email, hash, entry.fullName, boolTrue);
+        user = { id: userId, is_active: boolTrue };
+        created = true;
+        console.info("[bootstrap] created user", email, userId);
+      } catch (e) {
+        console.error("[bootstrap] failed creating user", email, e);
+        // Race: another request created them
+        user = await db
+          .prepare<{ id: string; is_active: number | boolean | string }>(
+            "SELECT id, is_active FROM users WHERE lower(email) = lower(?) LIMIT 1",
+          )
+          .get(email);
+        if (!user) throw e;
+      }
     } else {
       await db
         .prepare(
-          `UPDATE users SET is_active = ?, full_name = COALESCE(NULLIF(full_name, ''), ?)
+          `UPDATE users SET is_active = ?, full_name = CASE
+             WHEN full_name IS NULL OR full_name = '' THEN ?
+             ELSE full_name
+           END
            WHERE id = ?`,
         )
         .run(boolTrue, entry.fullName, user.id);
+      console.info("[bootstrap] ensured active user", email, user.id);
     }
 
     await seedRolesForOrg(org.id, user.id, "Admin");
+    results.push({ email, userId: user.id, created });
   }
+
+  return { orgId: org.id, ensured: results };
 }
 
 export async function seedRolesForOrg(

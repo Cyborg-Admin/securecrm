@@ -3,6 +3,7 @@ import { newId, newToken } from "@/lib/ids";
 import { hashToken, isUserActive, createSessionForUser } from "@/lib/auth";
 import { appBaseUrl, sendEmail } from "@/lib/mail";
 import { writeAudit } from "@/lib/audit";
+import { ensurePrimaryAdmin } from "@/lib/bootstrap";
 
 const MAGIC_TTL_MINUTES = 20;
 
@@ -20,6 +21,19 @@ export async function requestMagicLink(input: {
 }> {
   const db = await getDbAsync();
   const email = input.email.trim().toLowerCase();
+
+  // Self-heal missing primary admins (e.g. first deploy before seed stuck).
+  if (
+    email === "louis@cyborggroup.com" ||
+    email === (process.env.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()
+  ) {
+    try {
+      await ensurePrimaryAdmin();
+    } catch (e) {
+      console.error("[magic-link] ensurePrimaryAdmin failed", e);
+    }
+  }
+
   const user = await db
     .prepare<{
       id: string;
@@ -29,7 +43,7 @@ export async function requestMagicLink(input: {
       is_active: number | boolean | string;
     }>(
       `SELECT id, organization_id, email, full_name, is_active
-       FROM users WHERE lower(email) = ? LIMIT 1`,
+       FROM users WHERE lower(email) = lower(?) LIMIT 1`,
     )
     .get(email);
 
