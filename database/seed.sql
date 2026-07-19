@@ -1,0 +1,14 @@
+-- Seed permissions, default roles applied per-organization at bootstrap time.
+-- This file documents the canonical permission codes.
+
+-- Permission codes (inserted by app bootstrap if missing):
+-- org:manage
+-- users:read, users:write, users:assign_roles
+-- roles:manage
+-- leads:read, leads:write, leads:delete, leads:assign
+-- contacts:read, contacts:write, contacts:delete, contacts:assign
+-- companies:read, companies:write, companies:delete, companies:assign
+-- automations:read, automations:write, automations:run
+-- audit:read
+-- extension:capture, extension:match
+-- settings:manage
