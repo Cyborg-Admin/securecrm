@@ -10,7 +10,7 @@ const createSchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1).max(200),
   password: z.string().min(10).max(200),
-  roleName: z.enum(["Admin", "Manager", "Rep", "Viewer"]).default("Rep"),
+  roleName: z.string().min(1).max(80).default("Rep"),
 });
 
 export async function GET(req: NextRequest) {

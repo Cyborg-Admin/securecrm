@@ -82,10 +82,10 @@ export async function requestMagicLink(input: {
 
   const mail = await sendEmail({
     to: user.email,
-    subject: "Your SecureCRM sign-in link",
-    text: `Hi ${user.full_name},\n\nSign in to SecureCRM:\n${magicUrl}\n\nThis link expires in ${MAGIC_TTL_MINUTES} minutes. If you did not request it, ignore this email.`,
+    subject: "Your KINETIC sign-in link",
+    text: `Hi ${user.full_name},\n\nSign in to KINETIC:\n${magicUrl}\n\nThis link expires in ${MAGIC_TTL_MINUTES} minutes. If you did not request it, ignore this email.`,
     html: `<p>Hi ${escapeHtml(user.full_name)},</p>
-<p><a href="${magicUrl}">Sign in to SecureCRM</a></p>
+<p><a href="${magicUrl}">Sign in to KINETIC</a></p>
 <p>This link expires in ${MAGIC_TTL_MINUTES} minutes. If you did not request it, ignore this email.</p>`,
   });
 

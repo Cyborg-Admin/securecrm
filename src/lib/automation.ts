@@ -1,6 +1,7 @@
 import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { writeAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 import { parseJsonArray, parseJsonObject } from "@/lib/json";
 
 type AutomationAction =
@@ -93,6 +94,22 @@ async function applyAction(
       entityId: lead.id,
       after: { owner_user_id: ownerId },
     });
+    if (ownerId && ownerId !== input.actorUserId) {
+      const leadName =
+        (input.context.lead as { full_name?: string } | undefined)?.full_name ||
+        "a lead";
+      await createNotification({
+        organizationId: input.organizationId,
+        userId: ownerId,
+        type: "lead.assigned",
+        title: "Lead assigned by automation",
+        body: String(leadName),
+        href: `/leads?open=${lead.id}`,
+        entityType: "lead",
+        entityId: lead.id,
+        metadata: { via: "automation" },
+      });
+    }
     return { type: action.type, ownerId };
   }
 

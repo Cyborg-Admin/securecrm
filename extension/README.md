@@ -1,4 +1,4 @@
-# SecureCRM Chrome Extension (v1.3.0)
+# KINETIC Chrome Extension (v1.4.0)
 
 ## Install / update
 
@@ -13,7 +13,7 @@
 - **FAB** — capture / bulk / deep scrape / train on LinkedIn
 - **In-CRM badges** on LinkedIn search results
 - **Train mode** — click page elements to map scrape fields (saved as CRM recipes)
-- **Deep scrape** — opens profiles one-by-one in a `SecureCRM` tab group, scrapes experience history, saves, closes
+- **Deep scrape** — opens profiles one-by-one in a `KINETIC` tab group, scrapes experience history, saves, closes
 - **Role history** — previous appointments stored on the lead in the CRM
 
 ## Settings

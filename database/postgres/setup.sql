@@ -1,8 +1,8 @@
 -- =============================================================================
--- SecureCRM — PostgreSQL setup
+-- KINETIC — PostgreSQL setup
 -- Usage:
---   1. createdb securecrm
---   2. psql -d securecrm -f database/postgres/setup.sql
+--   1. createdb kinetic
+--   2. psql -d kinetic -f database/postgres/setup.sql
 --   3. Set DB_DRIVER=postgres and DATABASE_URL in .env
 -- =============================================================================
 
@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT NOT NULL,
   slug          TEXT NOT NULL UNIQUE,
+  settings_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  features_json JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -225,6 +227,47 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_audit_org_created ON audit_logs(organization_id, created_at);
 
+CREATE TABLE IF NOT EXISTS entity_activities (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  entity_type     TEXT NOT NULL CHECK (entity_type IN ('lead', 'contact', 'company')),
+  entity_id       TEXT NOT NULL,
+  activity_type   TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  body            TEXT,
+  dedupe_key      TEXT,
+  actor_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+  metadata_json   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  occurred_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activities_org_entity
+  ON entity_activities(organization_id, entity_type, entity_id, occurred_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_org_dedupe
+  ON entity_activities(organization_id, dedupe_key)
+  WHERE dedupe_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  body            TEXT,
+  href            TEXT,
+  entity_type     TEXT,
+  entity_id       TEXT,
+  metadata_json   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  read_at         TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
+  ON notifications(organization_id, user_id, read_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created
+  ON notifications(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS automations (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -279,3 +322,87 @@ CREATE TABLE IF NOT EXISTS capture_batches (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   finished_at     TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  pipeline_key      TEXT NOT NULL CHECK (pipeline_key IN ('opportunity', 'event_sales', 'event_delegate')),
+  name              TEXT NOT NULL,
+  sort_order        INTEGER NOT NULL DEFAULT 0,
+  probability       INTEGER NOT NULL DEFAULT 0,
+  is_won            BOOLEAN NOT NULL DEFAULT FALSE,
+  is_lost           BOOLEAN NOT NULL DEFAULT FALSE,
+  requires_approval BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (organization_id, pipeline_key, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stages_org_pipeline
+  ON pipeline_stages(organization_id, pipeline_key, sort_order);
+
+CREATE TABLE IF NOT EXISTS opportunities (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  company_id        UUID REFERENCES companies(id) ON DELETE SET NULL,
+  contact_id        UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  stage_id          UUID REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+  amount            DOUBLE PRECISION,
+  currency          TEXT NOT NULL DEFAULT 'GBP',
+  close_date        DATE,
+  owner_user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+  approval_status   TEXT NOT NULL DEFAULT 'none'
+                    CHECK (approval_status IN ('none', 'pending', 'approved', 'rejected')),
+  approved_by       UUID REFERENCES users(id) ON DELETE SET NULL,
+  approved_at       TIMESTAMPTZ,
+  approval_note     TEXT,
+  description       TEXT,
+  metadata_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_opps_org_stage
+  ON opportunities(organization_id, stage_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS events (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  location          TEXT,
+  starts_at         TIMESTAMPTZ,
+  ends_at           TIMESTAMPTZ,
+  status            TEXT NOT NULL DEFAULT 'draft'
+                    CHECK (status IN ('draft', 'published', 'live', 'completed', 'cancelled')),
+  capacity          INTEGER,
+  owner_user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+  metadata_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_org_starts
+  ON events(organization_id, starts_at);
+
+CREATE TABLE IF NOT EXISTS event_registrations (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  event_id          UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  track             TEXT NOT NULL CHECK (track IN ('sales', 'delegate')),
+  registrant_type   TEXT NOT NULL CHECK (registrant_type IN ('contact', 'lead', 'opportunity')),
+  registrant_id     TEXT NOT NULL,
+  stage_id          UUID REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+  opportunity_id    UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+  status            TEXT NOT NULL DEFAULT 'registered'
+                    CHECK (status IN ('registered', 'confirmed', 'attended', 'cancelled', 'no_show')),
+  notes             TEXT,
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_regs_event
+  ON event_registrations(organization_id, event_id, track);

@@ -3,6 +3,7 @@ import { newId } from "@/lib/ids";
 import { normalizeLinkedInUid, splitName } from "@/lib/normalize";
 import { upsertCompany } from "@/lib/companies";
 import { writeAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 import { runAutomations } from "@/lib/automation";
 import { parseJsonObject } from "@/lib/json";
 import {
@@ -197,6 +198,20 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
     after: lead,
   });
 
+  if (owner && owner !== input.actorUserId) {
+    await createNotification({
+      organizationId: input.organizationId,
+      userId: owner,
+      type: "lead.created",
+      title: "New lead assigned to you",
+      body: `${lead.full_name}${lead.company_name ? ` · ${lead.company_name}` : ""}`,
+      href: `/leads?open=${lead.id}`,
+      entityType: "lead",
+      entityId: lead.id,
+      metadata: { source: input.source },
+    });
+  }
+
   if (input.experiences?.length) {
     await replaceLeadExperiences({
       organizationId: input.organizationId,
@@ -274,4 +289,24 @@ export async function assignOwner(input: {
     before: { owner_user_id: current.owner_user_id },
     after: { owner_user_id: input.toUserId },
   });
+
+  if (input.toUserId !== input.actorUserId) {
+    const href =
+      input.entityType === "lead"
+        ? `/leads?open=${input.entityId}`
+        : input.entityType === "contact"
+          ? `/contacts?open=${input.entityId}`
+          : "/companies";
+    await createNotification({
+      organizationId: input.organizationId,
+      userId: input.toUserId,
+      type: `${input.entityType}.assigned`,
+      title: `${input.entityType[0].toUpperCase()}${input.entityType.slice(1)} assigned to you`,
+      body: input.reason || "Ownership was transferred to you.",
+      href,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      metadata: { fromUserId: current.owner_user_id, byUserId: input.actorUserId },
+    });
+  }
 }

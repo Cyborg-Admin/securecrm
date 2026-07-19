@@ -193,7 +193,7 @@
             },
           },
         ],
-        { title: "SecureCRM · Sales Nav" },
+        { title: "KINETIC · Sales Nav" },
       );
       return;
     }
@@ -240,7 +240,7 @@
           },
         },
       ],
-      { title: "SecureCRM · Sales Nav search" },
+      { title: "KINETIC · Sales Nav search" },
     );
   }
 

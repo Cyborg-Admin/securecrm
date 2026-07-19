@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { KineticEmblem } from "@/components/KineticEmblem";
 import { api } from "@/lib/client-api";
 
 type Mode = "magic" | "password";
@@ -77,11 +78,16 @@ export default function LoginPage() {
       />
 
       <div className="neo-raised relative w-full max-w-md fade-up p-8">
-        <p className="page-kicker">Secure workspace</p>
-        <p className="display mt-2 text-4xl text-[var(--accent-deep)]">
-          SecureCRM
-        </p>
-        <p className="mt-2 text-[var(--neo-muted)]">
+        <div className="flex items-center gap-3">
+          <KineticEmblem size={48} />
+          <div>
+            <p className="page-kicker">CRM workspace</p>
+            <p className="brand-type mt-1 text-2xl text-[var(--accent-deep)]">
+              Kinetic
+            </p>
+          </div>
+        </div>
+        <p className="mt-4 text-[var(--neo-muted)]">
           Sign in with a magic link. Password is optional for accounts that have
           one.
         </p>

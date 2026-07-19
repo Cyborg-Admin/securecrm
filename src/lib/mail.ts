@@ -45,7 +45,7 @@ export function getMailConfig() {
   const fromName =
     process.env.MAIL_FROM_NAME?.trim() ||
     process.env.NEXT_PUBLIC_APP_NAME ||
-    "SecureCRM";
+    "KINETIC";
 
   return {
     key,

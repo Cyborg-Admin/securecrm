@@ -1,5 +1,5 @@
 -- =============================================================================
--- SecureCRM — Core Schema (SQLite-compatible)
+-- KINETIC — Core Schema (SQLite-compatible)
 -- Multi-tenant, RBAC, audit, automation, companies/leads/contacts
 -- For PostgreSQL, run database/postgres/setup.sql after adapting types, OR
 -- set DB_DRIVER=postgres and use the migrator which applies this dialect file.
@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS organizations (
   id            TEXT PRIMARY KEY,
   name          TEXT NOT NULL,
   slug          TEXT NOT NULL UNIQUE,
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  features_json TEXT NOT NULL DEFAULT '{}',
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -254,6 +256,49 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_audit_org_created
   ON audit_logs(organization_id, created_at);
 
+-- CRM activity timeline (emails scanned, notes, etc.)
+CREATE TABLE IF NOT EXISTS entity_activities (
+  id              TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  entity_type     TEXT NOT NULL CHECK (entity_type IN ('lead', 'contact', 'company')),
+  entity_id       TEXT NOT NULL,
+  activity_type   TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  body            TEXT,
+  dedupe_key      TEXT,
+  actor_user_id   TEXT REFERENCES users(id) ON DELETE SET NULL,
+  metadata_json   TEXT NOT NULL DEFAULT '{}',
+  occurred_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_activities_org_entity
+  ON entity_activities(organization_id, entity_type, entity_id, occurred_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_org_dedupe
+  ON entity_activities(organization_id, dedupe_key)
+  WHERE dedupe_key IS NOT NULL;
+
+-- In-app notifications (per user, tenant-scoped)
+CREATE TABLE IF NOT EXISTS notifications (
+  id              TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  body            TEXT,
+  href            TEXT,
+  entity_type     TEXT,
+  entity_id       TEXT,
+  metadata_json   TEXT NOT NULL DEFAULT '{}',
+  read_at         TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
+  ON notifications(organization_id, user_id, read_at, created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created
+  ON notifications(user_id, created_at);
+
 -- -----------------------------------------------------------------------------
 -- Automation engine
 -- -----------------------------------------------------------------------------
@@ -317,3 +362,96 @@ CREATE TABLE IF NOT EXISTS capture_batches (
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   finished_at     TEXT
 );
+
+-- -----------------------------------------------------------------------------
+-- Pipeline stages (opportunities + event tracks)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+  id                TEXT PRIMARY KEY,
+  organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  pipeline_key      TEXT NOT NULL CHECK (pipeline_key IN ('opportunity', 'event_sales', 'event_delegate')),
+  name              TEXT NOT NULL,
+  sort_order        INTEGER NOT NULL DEFAULT 0,
+  probability       INTEGER NOT NULL DEFAULT 0,
+  is_won            INTEGER NOT NULL DEFAULT 0,
+  is_lost           INTEGER NOT NULL DEFAULT 0,
+  requires_approval INTEGER NOT NULL DEFAULT 0,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (organization_id, pipeline_key, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stages_org_pipeline
+  ON pipeline_stages(organization_id, pipeline_key, sort_order);
+
+-- -----------------------------------------------------------------------------
+-- Opportunities
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS opportunities (
+  id                TEXT PRIMARY KEY,
+  organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  company_id        TEXT REFERENCES companies(id) ON DELETE SET NULL,
+  contact_id        TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+  stage_id          TEXT REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+  amount            REAL,
+  currency          TEXT NOT NULL DEFAULT 'GBP',
+  close_date        TEXT,
+  owner_user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  approval_status   TEXT NOT NULL DEFAULT 'none'
+                    CHECK (approval_status IN ('none', 'pending', 'approved', 'rejected')),
+  approved_by       TEXT REFERENCES users(id) ON DELETE SET NULL,
+  approved_at       TEXT,
+  approval_note     TEXT,
+  description       TEXT,
+  metadata_json     TEXT NOT NULL DEFAULT '{}',
+  created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_opps_org_stage
+  ON opportunities(organization_id, stage_id, updated_at);
+
+-- -----------------------------------------------------------------------------
+-- Events + registrations (sales & delegate tracks)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS events (
+  id                TEXT PRIMARY KEY,
+  organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  location          TEXT,
+  starts_at         TEXT,
+  ends_at           TEXT,
+  status            TEXT NOT NULL DEFAULT 'draft'
+                    CHECK (status IN ('draft', 'published', 'live', 'completed', 'cancelled')),
+  capacity          INTEGER,
+  owner_user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  metadata_json     TEXT NOT NULL DEFAULT '{}',
+  created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_org_starts
+  ON events(organization_id, starts_at);
+
+CREATE TABLE IF NOT EXISTS event_registrations (
+  id                TEXT PRIMARY KEY,
+  organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  event_id          TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  track             TEXT NOT NULL CHECK (track IN ('sales', 'delegate')),
+  registrant_type   TEXT NOT NULL CHECK (registrant_type IN ('contact', 'lead', 'opportunity')),
+  registrant_id     TEXT NOT NULL,
+  stage_id          TEXT REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+  opportunity_id    TEXT REFERENCES opportunities(id) ON DELETE SET NULL,
+  status            TEXT NOT NULL DEFAULT 'registered'
+                    CHECK (status IN ('registered', 'confirmed', 'attended', 'cancelled', 'no_show')),
+  notes             TEXT,
+  created_by        TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_regs_event
+  ON event_registrations(organization_id, event_id, track);

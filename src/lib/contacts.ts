@@ -2,6 +2,7 @@ import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { normalizeLinkedInUid } from "@/lib/normalize";
 import { writeAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 import { runAutomations } from "@/lib/automation";
 
 export type ContactRow = {
@@ -180,6 +181,20 @@ export async function convertLeadToContact(input: {
     entityId: lead.id,
     after: { contact_id: contact.id },
   });
+
+  if (lead.owner_user_id && lead.owner_user_id !== input.actorUserId) {
+    await createNotification({
+      organizationId: input.organizationId,
+      userId: lead.owner_user_id,
+      type: "lead.converted",
+      title: "Lead progressed to contact",
+      body: lead.full_name,
+      href: `/contacts?open=${contact.id}`,
+      entityType: "contact",
+      entityId: contact.id,
+      metadata: { leadId: lead.id },
+    });
+  }
 
   await runAutomations({
     organizationId: input.organizationId,

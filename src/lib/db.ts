@@ -206,17 +206,19 @@ export async function ensureSchema(): Promise<void> {
     );
     const schema = fs.readFileSync(schemaPath, "utf8");
     await db.exec(schema);
-    return;
+  } else {
+    const schemaPath = path.join(
+      /* turbopackIgnore: true */ process.cwd(),
+      "database",
+      "postgres",
+      "setup.sql",
+    );
+    const schema = fs.readFileSync(schemaPath, "utf8");
+    await db.exec(schema);
   }
 
-  const schemaPath = path.join(
-    /* turbopackIgnore: true */ process.cwd(),
-    "database",
-    "postgres",
-    "setup.sql",
-  );
-  const schema = fs.readFileSync(schemaPath, "utf8");
-  await db.exec(schema);
+  const { runMigrations } = await import("@/lib/migrations");
+  await runMigrations();
 }
 
 export type Row = Record<string, unknown>;

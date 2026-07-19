@@ -31,7 +31,7 @@
   async function crmFetch(path, options = {}) {
     const { apiBase, apiKey } = await getConfig();
     if (!apiKey) {
-      throw new Error("Set your SecureCRM API key in the side panel.");
+      throw new Error("Set your KINETIC API key in the side panel.");
     }
 
     const res = await fetch(`${apiBase}${path}`, {
@@ -62,6 +62,13 @@
 
   async function matchPerson(payload) {
     return crmFetch("/api/extension/match", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async function logActivity(payload) {
+    return crmFetch("/api/extension/activity", {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -127,6 +134,7 @@
     crmFetch,
     captureLeads,
     matchPerson,
+    logActivity,
     lookupLinkedIn,
     searchLeads,
     fetchVersion,

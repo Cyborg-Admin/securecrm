@@ -98,7 +98,7 @@ async function ensureGroup(tabId) {
     }
     const groupId = await chrome.tabs.group({ tabIds: [tabId] });
     await chrome.tabGroups.update(groupId, {
-      title: "SecureCRM",
+      title: "KINETIC",
       color: "green",
     });
     deepScrape.groupId = groupId;

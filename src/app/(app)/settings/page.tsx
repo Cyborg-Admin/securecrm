@@ -3,6 +3,15 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/client-api";
+import { FEATURE_KEYS } from "@/lib/features";
+
+type Tab =
+  | "org"
+  | "users"
+  | "roles"
+  | "features"
+  | "pipelines"
+  | "extension";
 
 type KeyRow = {
   id: string;
@@ -13,198 +22,637 @@ type KeyRow = {
   created_at: string;
 };
 
-type RecipeRow = {
+type UserRow = {
   id: string;
-  source: string;
-  version: number;
-  is_active: boolean | number;
-  fields: Record<string, unknown>;
-  updated_at: string;
+  email: string;
+  full_name: string;
+  roles: string | null;
+  is_active: number | boolean;
 };
 
-export default function SettingsPage() {
-  const [keys, setKeys] = useState<KeyRow[]>([]);
-  const [name, setName] = useState("Chrome Extension");
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
-  const [recipes, setRecipes] = useState<RecipeRow[]>([]);
-  const [recipeSource, setRecipeSource] = useState("linkedin");
-  const [recipeJson, setRecipeJson] = useState("{}");
-  const [recipeStatus, setRecipeStatus] = useState<string | null>(null);
+type RoleRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: number | boolean;
+  permissions: string[];
+};
 
-  async function load() {
+type StageRow = {
+  id: string;
+  pipeline_key: string;
+  name: string;
+  sort_order: number;
+  probability: number;
+  requires_approval: number | boolean;
+};
+
+type OrgPayload = {
+  organization: { id: string; name: string; slug: string };
+  settings: {
+    timezone: string;
+    currency: string;
+    opportunityApproval: {
+      enabled: boolean;
+      requireApprovalStageIds: string[];
+      approverUserIds: string[];
+    };
+  };
+  features: Record<string, boolean>;
+};
+
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "org", label: "Organization" },
+  { id: "users", label: "Users" },
+  { id: "roles", label: "Roles" },
+  { id: "features", label: "Features" },
+  { id: "pipelines", label: "Pipelines" },
+  { id: "extension", label: "Extension" },
+];
+
+export default function SettingsPage() {
+  const [tab, setTab] = useState<Tab>("org");
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("—");
+
+  const [org, setOrg] = useState<OrgPayload | null>(null);
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+  const [timezone, setTimezone] = useState("Europe/London");
+  const [currency, setCurrency] = useState("GBP");
+  const [approvalEnabled, setApprovalEnabled] = useState(true);
+
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [allPerms, setAllPerms] = useState<Array<{ code: string; description: string }>>(
+    [],
+  );
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [rolePerms, setRolePerms] = useState<string[]>([]);
+
+  const [invite, setInvite] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    roleName: "Rep",
+  });
+
+  const [stages, setStages] = useState<StageRow[]>([]);
+  const [newStage, setNewStage] = useState({
+    pipelineKey: "opportunity",
+    name: "",
+    requiresApproval: false,
+  });
+
+  const [keys, setKeys] = useState<KeyRow[]>([]);
+  const [keyName, setKeyName] = useState("Chrome Extension");
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+
+  async function loadOrg() {
+    const data = await api<OrgPayload>("/api/org");
+    setOrg(data);
+    setOrgName(data.organization.name);
+    setOrgSlug(data.organization.slug);
+    setTimezone(data.settings.timezone);
+    setCurrency(data.settings.currency);
+    setApprovalEnabled(data.settings.opportunityApproval.enabled);
+  }
+
+  async function loadUsers() {
+    const data = await api<{ users: UserRow[] }>("/api/users");
+    setUsers(data.users);
+  }
+
+  async function loadRoles() {
+    const data = await api<{
+      roles: RoleRow[];
+      allPermissions: Array<{ code: string; description: string }>;
+    }>("/api/roles");
+    setRoles(data.roles);
+    setAllPerms(data.allPermissions);
+    if (!selectedRoleId && data.roles[0]) {
+      setSelectedRoleId(data.roles[0].id);
+      setRolePerms(data.roles[0].permissions);
+    } else if (selectedRoleId) {
+      const r = data.roles.find((x) => x.id === selectedRoleId);
+      if (r) setRolePerms(r.permissions);
+    }
+  }
+
+  async function loadStages() {
+    const data = await api<{ stages: StageRow[] }>("/api/pipeline-stages");
+    setStages(data.stages);
+  }
+
+  async function loadKeys() {
     const data = await api<{ keys: KeyRow[] }>("/api/settings/api-keys");
     setKeys(data.keys);
   }
 
-  async function loadRecipes(source = recipeSource) {
-    const data = await api<{ recipes: RecipeRow[] }>(
-      `/api/scrape-recipes?source=${encodeURIComponent(source)}`,
-    );
-    setRecipes(data.recipes);
-    const active = data.recipes.find((r) => r.is_active === true || r.is_active === 1);
-    setRecipeJson(JSON.stringify(active?.fields || {}, null, 2));
-  }
-
   useEffect(() => {
-    void load();
-    void loadRecipes("linkedin");
+    void api<{ version: string }>("/api/version")
+      .then((v) => setAppVersion(v.version))
+      .catch(() => undefined);
+    void loadOrg().catch((e) => setError(e.message));
+    void loadUsers().catch(() => undefined);
+    void loadRoles().catch(() => undefined);
+    void loadStages().catch(() => undefined);
+    void loadKeys().catch(() => undefined);
   }, []);
 
-  async function onCreate(e: FormEvent) {
-    e.preventDefault();
-    const res = await api<{ apiKey: string }>("/api/settings/api-keys", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    });
-    setCreatedKey(res.apiKey);
-    await load();
-  }
+  useEffect(() => {
+    const r = roles.find((x) => x.id === selectedRoleId);
+    if (r) setRolePerms(r.permissions);
+  }, [selectedRoleId, roles]);
 
-  async function saveRecipe() {
-    setRecipeStatus(null);
+  async function saveOrg(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setStatus(null);
     try {
-      const fields = JSON.parse(recipeJson) as Record<string, unknown>;
-      await api("/api/scrape-recipes", {
-        method: "PUT",
-        body: JSON.stringify({ source: recipeSource, fields }),
+      await api("/api/org", {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: orgName,
+          slug: orgSlug,
+          settings: {
+            timezone,
+            currency,
+            opportunityApproval: {
+              enabled: approvalEnabled,
+              requireApprovalStageIds:
+                org?.settings.opportunityApproval.requireApprovalStageIds || [],
+              approverUserIds:
+                org?.settings.opportunityApproval.approverUserIds || [],
+            },
+          },
+        }),
       });
-      setRecipeStatus("Saved as new active version.");
-      await loadRecipes(recipeSource);
-    } catch (e) {
-      setRecipeStatus(e instanceof Error ? e.message : "Save failed");
+      setStatus("Organization saved.");
+      await loadOrg();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
     }
   }
 
-  async function activateRecipe(id: string) {
-    await api("/api/scrape-recipes", {
-      method: "PUT",
-      body: JSON.stringify({ recipeId: id }),
+  async function saveFeatures() {
+    if (!org) return;
+    setError(null);
+    try {
+      await api("/api/org", {
+        method: "PATCH",
+        body: JSON.stringify({ features: org.features }),
+      });
+      setStatus("Feature access updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function inviteUser(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api("/api/users", {
+        method: "POST",
+        body: JSON.stringify(invite),
+      });
+      setInvite({ fullName: "", email: "", password: "", roleName: "Rep" });
+      setStatus("User invited.");
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invite failed");
+    }
+  }
+
+  async function toggleUser(u: UserRow) {
+    const active = Boolean(u.is_active);
+    await api(`/api/users/${u.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive: !active }),
     });
-    await loadRecipes(recipeSource);
+    await loadUsers();
+  }
+
+  async function setUserRole(u: UserRow, roleName: string) {
+    await api(`/api/users/${u.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ roleName }),
+    });
+    await loadUsers();
+  }
+
+  async function saveRolePerms() {
+    if (!selectedRoleId) return;
+    await api(`/api/roles/${selectedRoleId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ permissions: rolePerms }),
+    });
+    setStatus("Role permissions saved.");
+    await loadRoles();
+  }
+
+  async function createStage(e: FormEvent) {
+    e.preventDefault();
+    await api("/api/pipeline-stages", {
+      method: "POST",
+      body: JSON.stringify({
+        pipelineKey: newStage.pipelineKey,
+        name: newStage.name,
+        requiresApproval: newStage.requiresApproval,
+      }),
+    });
+    setNewStage((s) => ({ ...s, name: "" }));
+    await loadStages();
+  }
+
+  async function toggleStageApproval(s: StageRow) {
+    await api("/api/pipeline-stages", {
+      method: "PATCH",
+      body: JSON.stringify({
+        id: s.id,
+        requiresApproval: !Boolean(s.requires_approval),
+      }),
+    });
+    await loadStages();
+  }
+
+  async function createKey(e: FormEvent) {
+    e.preventDefault();
+    const res = await api<{ apiKey: string }>("/api/settings/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ name: keyName }),
+    });
+    setCreatedKey(res.apiKey);
+    await loadKeys();
   }
 
   return (
     <AppShell>
-      <h1 className="display text-3xl">Settings</h1>
-      <p className="mt-1 text-[var(--neo-muted)]">
-        Extension API keys, scrape recipes, and workspace security.
-      </p>
-
-      <section className="neo-raised mt-5 p-5">
-        <h2 className="display text-xl">Chrome extension</h2>
-        <p className="mt-1 text-sm text-[var(--neo-muted)]">
-          Generate a key, then paste it in the extension side panel (toolbar icon).
-          Keys are hashed at rest. Download the latest packaged build anytime:
-        </p>
-        <p className="mt-3">
-          <a className="neo-btn neo-btn-primary inline-block" href="/api/extension/download">
-            Download extension zip
-          </a>
-          <span className="ml-3 text-xs text-[var(--neo-muted)]">
-            Current package reports version via{" "}
-            <a className="underline" href="/api/extension/version">
-              /api/extension/version
-            </a>
-          </span>
-        </p>
-        <form onSubmit={onCreate} className="mt-4 flex flex-col gap-3 sm:flex-row">
-          <input className="neo-input" value={name} onChange={(e) => setName(e.target.value)} />
-          <button className="neo-btn neo-btn-primary">Generate key</button>
-        </form>
-        {createdKey && (
-          <div className="neo-inset mt-4 break-all p-3 text-sm">
-            <p className="font-medium text-[var(--neo-accent)]">Copy now — shown once</p>
-            <code>{createdKey}</code>
-          </div>
-        )}
-        <ul className="mt-4 space-y-2">
-          {keys.map((k) => (
-            <li key={k.id} className="neo-inset flex justify-between gap-3 p-3 text-sm">
-              <span>{k.name} · {k.key_prefix}…</span>
-              <span className="text-[var(--neo-muted)]">
-                {k.revoked_at ? "Revoked" : "Active"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="neo-raised mt-4 p-5">
-        <h2 className="display text-xl">Scrape recipes</h2>
-        <p className="mt-1 text-sm text-[var(--neo-muted)]">
-          Owner-trainable field maps for the Chrome extension. Prefer Train mode on
-          LinkedIn; edit JSON here for advanced tweaks.
-        </p>
-        <label className="mt-4 block text-sm text-[var(--neo-muted)]">
-          Source
-          <select
-            className="neo-input mt-1"
-            value={recipeSource}
-            onChange={(e) => {
-              const s = e.target.value;
-              setRecipeSource(s);
-              void loadRecipes(s);
-            }}
-          >
-            <option value="linkedin">LinkedIn</option>
-            <option value="salesnav">Sales Navigator</option>
-            <option value="cognism">Cognism</option>
-            <option value="gmail">Gmail</option>
-          </select>
-        </label>
-        <textarea
-          className="neo-input mt-3 min-h-48 font-mono text-xs"
-          value={recipeJson}
-          onChange={(e) => setRecipeJson(e.target.value)}
-        />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className="neo-btn neo-btn-primary" onClick={() => void saveRecipe()}>
-            Save as active version
-          </button>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="display text-3xl">Settings</h1>
+          <p className="mt-1 text-[var(--neo-muted)]">
+            Organization, access control, pipelines, and integrations · app v
+            {appVersion}
+          </p>
         </div>
-        {recipeStatus && (
-          <p className="mt-2 text-sm text-[var(--accent-deep)]">{recipeStatus}</p>
-        )}
-        <ul className="mt-4 space-y-2 text-sm">
-          {recipes.map((r) => (
-            <li key={r.id} className="neo-inset flex items-center justify-between gap-3 p-3">
-              <span>
-                v{r.version}
-                {(r.is_active === true || r.is_active === 1) && (
-                  <span className="ml-2 text-[var(--accent-deep)]">active</span>
-                )}
-                <span className="ml-2 text-[var(--neo-muted)]">
-                  {String(r.updated_at).slice(0, 19).replace("T", " ")}
-                </span>
-              </span>
-              {!(r.is_active === true || r.is_active === 1) && (
+      </div>
+
+      <nav className="record-tabs mt-5" aria-label="Settings sections">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`record-tab ${tab === t.id ? "is-active" : ""}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {status ? (
+        <p className="mt-3 text-sm text-[var(--accent-deep)]">{status}</p>
+      ) : null}
+      {error ? (
+        <p className="mt-3 text-sm text-[var(--neo-danger)]">{error}</p>
+      ) : null}
+
+      {tab === "org" && (
+        <form onSubmit={saveOrg} className="neo-raised mt-4 grid gap-3 p-5 md:grid-cols-2">
+          <label className="text-sm md:col-span-2">
+            <span className="text-[var(--neo-muted)]">Organization name</span>
+            <input
+              className="neo-input mt-1"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              required
+            />
+          </label>
+          <label className="text-sm">
+            <span className="text-[var(--neo-muted)]">Slug</span>
+            <input
+              className="neo-input mt-1"
+              value={orgSlug}
+              onChange={(e) => setOrgSlug(e.target.value)}
+              required
+              pattern="[a-z0-9-]+"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="text-[var(--neo-muted)]">Timezone</span>
+            <input
+              className="neo-input mt-1"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+            />
+          </label>
+          <label className="text-sm">
+            <span className="text-[var(--neo-muted)]">Currency</span>
+            <input
+              className="neo-input mt-1"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm md:col-span-2">
+            <input
+              type="checkbox"
+              checked={approvalEnabled}
+              onChange={(e) => setApprovalEnabled(e.target.checked)}
+            />
+            Enable opportunity approval process (stages marked “requires approval”)
+          </label>
+          <button className="neo-btn neo-btn-primary md:col-span-2" type="submit">
+            Save organization
+          </button>
+        </form>
+      )}
+
+      {tab === "users" && (
+        <div className="mt-4 space-y-4">
+          <form
+            onSubmit={inviteUser}
+            className="neo-raised grid gap-3 p-4 md:grid-cols-2"
+          >
+            <input
+              className="neo-input"
+              placeholder="Full name"
+              value={invite.fullName}
+              onChange={(e) => setInvite((i) => ({ ...i, fullName: e.target.value }))}
+              required
+            />
+            <input
+              className="neo-input"
+              type="email"
+              placeholder="Email"
+              value={invite.email}
+              onChange={(e) => setInvite((i) => ({ ...i, email: e.target.value }))}
+              required
+            />
+            <input
+              className="neo-input"
+              type="password"
+              placeholder="Temp password (10+)"
+              value={invite.password}
+              onChange={(e) => setInvite((i) => ({ ...i, password: e.target.value }))}
+              required
+              minLength={10}
+            />
+            <select
+              className="neo-input"
+              value={invite.roleName}
+              onChange={(e) => setInvite((i) => ({ ...i, roleName: e.target.value }))}
+            >
+              {roles.map((r) => (
+                <option key={r.id} value={r.name}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <button className="neo-btn neo-btn-primary md:col-span-2" type="submit">
+              Invite user
+            </button>
+          </form>
+          <ul className="space-y-2">
+            {users.map((u) => (
+              <li
+                key={u.id}
+                className="neo-raised flex flex-wrap items-center justify-between gap-3 p-4"
+              >
+                <div>
+                  <p className="font-medium">{u.full_name}</p>
+                  <p className="text-sm text-[var(--neo-muted)]">{u.email}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className="neo-input w-auto"
+                    value={(u.roles || "Rep").split(",")[0]}
+                    onChange={(e) => void setUserRole(u, e.target.value)}
+                  >
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="neo-btn text-sm" type="button" onClick={() => void toggleUser(u)}>
+                    {u.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tab === "roles" && (
+        <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+          <ul className="neo-raised space-y-1 p-3">
+            {roles.map((r) => (
+              <li key={r.id}>
                 <button
                   type="button"
-                  className="neo-btn text-xs"
-                  onClick={() => void activateRecipe(r.id)}
+                  className={`w-full rounded-xl px-3 py-2 text-left text-sm ${
+                    selectedRoleId === r.id ? "neo-pressed" : "hover:bg-white/70"
+                  }`}
+                  onClick={() => setSelectedRoleId(r.id)}
                 >
-                  Activate
+                  {r.name}
+                  {r.is_system ? (
+                    <span className="ml-2 text-xs text-[var(--neo-muted)]">system</span>
+                  ) : null}
                 </button>
-              )}
-            </li>
-          ))}
-          {!recipes.length && (
-            <li className="text-[var(--neo-muted)]">No versions yet — train on LinkedIn or paste JSON.</li>
-          )}
-        </ul>
-      </section>
+              </li>
+            ))}
+          </ul>
+          <div className="neo-raised p-4">
+            <p className="font-medium">Permissions</p>
+            <div className="mt-3 grid max-h-[50vh] gap-2 overflow-auto sm:grid-cols-2">
+              {allPerms.map((p) => (
+                <label key={p.code} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={rolePerms.includes(p.code)}
+                    onChange={(e) => {
+                      setRolePerms((prev) =>
+                        e.target.checked
+                          ? [...prev, p.code]
+                          : prev.filter((c) => c !== p.code),
+                      );
+                    }}
+                  />
+                  <span>
+                    <span className="font-medium">{p.code}</span>
+                    <span className="block text-xs text-[var(--neo-muted)]">
+                      {p.description}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="neo-btn neo-btn-primary mt-4"
+              onClick={() => void saveRolePerms()}
+            >
+              Save role permissions
+            </button>
+          </div>
+        </div>
+      )}
 
-      <section className="neo-raised mt-4 p-5 text-sm text-[var(--neo-muted)]">
-        <h2 className="display text-xl text-[var(--neo-text)]">Database</h2>
-        <p className="mt-2">
-          Local default: SQLite at <code>data/securecrm.sqlite</code> from{" "}
-          <code>database/schema.sql</code>.
-        </p>
-        <p className="mt-2">
-          PostgreSQL: run <code>database/postgres/setup.sql</code>, then set{" "}
-          <code>DB_DRIVER=postgres</code> and <code>DATABASE_URL</code>.
-        </p>
-      </section>
+      {tab === "features" && org && (
+        <div className="neo-raised mt-4 p-5">
+          <p className="text-sm text-[var(--neo-muted)]">
+            Toggle which product areas appear for this organization. Permissions still apply.
+          </p>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {FEATURE_KEYS.map((key) => (
+              <li key={key}>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] px-3 py-2 text-sm">
+                  <span className="capitalize">{key}</span>
+                  <input
+                    type="checkbox"
+                    checked={org.features[key] !== false}
+                    onChange={(e) =>
+                      setOrg({
+                        ...org,
+                        features: { ...org.features, [key]: e.target.checked },
+                      })
+                    }
+                  />
+                </label>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="neo-btn neo-btn-primary mt-4"
+            onClick={() => void saveFeatures()}
+          >
+            Save feature access
+          </button>
+        </div>
+      )}
+
+      {tab === "pipelines" && (
+        <div className="mt-4 space-y-4">
+          <form
+            onSubmit={createStage}
+            className="neo-raised grid gap-3 p-4 md:grid-cols-3"
+          >
+            <select
+              className="neo-input"
+              value={newStage.pipelineKey}
+              onChange={(e) =>
+                setNewStage((s) => ({ ...s, pipelineKey: e.target.value }))
+              }
+            >
+              <option value="opportunity">Opportunity</option>
+              <option value="event_sales">Event · Sales</option>
+              <option value="event_delegate">Event · Delegate</option>
+            </select>
+            <input
+              className="neo-input"
+              placeholder="Stage name"
+              value={newStage.name}
+              onChange={(e) => setNewStage((s) => ({ ...s, name: e.target.value }))}
+              required
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={newStage.requiresApproval}
+                onChange={(e) =>
+                  setNewStage((s) => ({
+                    ...s,
+                    requiresApproval: e.target.checked,
+                  }))
+                }
+              />
+              Requires approval
+            </label>
+            <button className="neo-btn neo-btn-primary md:col-span-3" type="submit">
+              Add stage
+            </button>
+          </form>
+          {(["opportunity", "event_sales", "event_delegate"] as const).map((key) => (
+            <section key={key} className="neo-raised p-4">
+              <h3 className="record-section-title">{key.replace("_", " · ")}</h3>
+              <ul className="mt-2 space-y-2">
+                {stages
+                  .filter((s) => s.pipeline_key === key)
+                  .map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                    >
+                      <span>
+                        {s.sort_order + 1}. {s.name}{" "}
+                        <span className="text-[var(--neo-muted)]">
+                          ({s.probability}%)
+                        </span>
+                      </span>
+                      {key === "opportunity" ? (
+                        <button
+                          type="button"
+                          className="neo-btn text-xs"
+                          onClick={() => void toggleStageApproval(s)}
+                        >
+                          {s.requires_approval
+                            ? "Approval required"
+                            : "No approval"}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {tab === "extension" && (
+        <div className="neo-raised mt-4 space-y-4 p-5">
+          <p className="text-sm text-[var(--neo-muted)]">
+            Generate a key for the Chrome extension. Download the latest package:
+          </p>
+          <a className="neo-btn neo-btn-primary inline-block" href="/api/extension/download">
+            Download extension
+          </a>
+          <form onSubmit={createKey} className="flex flex-wrap gap-2">
+            <input
+              className="neo-input max-w-xs"
+              value={keyName}
+              onChange={(e) => setKeyName(e.target.value)}
+            />
+            <button className="neo-btn neo-btn-primary" type="submit">
+              Create API key
+            </button>
+          </form>
+          {createdKey ? (
+            <p className="break-all rounded-xl bg-[var(--accent-soft)] p-3 text-sm">
+              Copy now — shown once: <code>{createdKey}</code>
+            </p>
+          ) : null}
+          <ul className="space-y-2 text-sm">
+            {keys.map((k) => (
+              <li key={k.id} className="flex justify-between gap-2 border-t border-[var(--line)] pt-2">
+                <span>
+                  {k.name} · {k.key_prefix}…
+                </span>
+                <span className="text-[var(--neo-muted)]">
+                  {k.revoked_at ? "Revoked" : "Active"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </AppShell>
   );
 }

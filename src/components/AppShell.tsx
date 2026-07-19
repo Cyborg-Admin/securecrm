@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client-api";
+import { KineticEmblem } from "@/components/KineticEmblem";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { QuickFab } from "@/components/QuickFab";
 
 type MeResponse = {
@@ -15,25 +17,162 @@ type MeResponse = {
     permissions: string[];
   };
   organization: { name: string; slug: string };
+  features?: Record<string, boolean>;
+  appVersion?: string;
 };
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", perm: "leads:read" },
-  { href: "/reports", label: "Reports", perm: "leads:read" },
-  { href: "/leads", label: "Leads", perm: "leads:read" },
-  { href: "/contacts", label: "Contacts", perm: "contacts:read" },
-  { href: "/companies", label: "Companies", perm: "companies:read" },
-  { href: "/automations", label: "Automations", perm: "automations:read" },
-  { href: "/team", label: "Team", perm: "users:read" },
-  { href: "/settings", label: "Settings", perm: "settings:manage" },
+type NavItem = {
+  href: string;
+  label: string;
+  perm: string;
+  feature?: string;
+  icon:
+    | "home"
+    | "chart"
+    | "leads"
+    | "contacts"
+    | "company"
+    | "opp"
+    | "event"
+    | "bolt"
+    | "team"
+    | "gear";
+};
+
+type NavGroup = { id: string; label: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "workspace",
+    label: "Workspace",
+    items: [
+      { href: "/dashboard", label: "Dashboard", perm: "leads:read", icon: "home" },
+      {
+        href: "/reports",
+        label: "Reports",
+        perm: "leads:read",
+        feature: "reports",
+        icon: "chart",
+      },
+    ],
+  },
+  {
+    id: "pipeline",
+    label: "Pipeline",
+    items: [
+      {
+        href: "/leads",
+        label: "Leads",
+        perm: "leads:read",
+        feature: "leads",
+        icon: "leads",
+      },
+      {
+        href: "/contacts",
+        label: "Contacts",
+        perm: "contacts:read",
+        feature: "contacts",
+        icon: "contacts",
+      },
+      {
+        href: "/companies",
+        label: "Companies",
+        perm: "companies:read",
+        feature: "companies",
+        icon: "company",
+      },
+      {
+        href: "/opportunities",
+        label: "Opportunities",
+        perm: "opportunities:read",
+        feature: "opportunities",
+        icon: "opp",
+      },
+      {
+        href: "/events",
+        label: "Events",
+        perm: "events:read",
+        feature: "events",
+        icon: "event",
+      },
+    ],
+  },
+  {
+    id: "ops",
+    label: "Operations",
+    items: [
+      {
+        href: "/automations",
+        label: "Automations",
+        perm: "automations:read",
+        feature: "automations",
+        icon: "bolt",
+      },
+      {
+        href: "/team",
+        label: "Team",
+        perm: "users:read",
+        feature: "team",
+        icon: "team",
+      },
+      {
+        href: "/settings",
+        label: "Settings",
+        perm: "settings:manage",
+        icon: "gear",
+      },
+    ],
+  },
 ];
+
+const PAGE_META: Record<string, { title: string; subtitle: string }> = {
+  "/dashboard": { title: "Dashboard", subtitle: "Pipeline pulse and ownership" },
+  "/reports": { title: "Reports", subtitle: "Trends across your workspace" },
+  "/leads": { title: "Leads", subtitle: "Capture and qualify prospects" },
+  "/contacts": { title: "Contacts", subtitle: "People you’re engaging" },
+  "/companies": { title: "Companies", subtitle: "Accounts and domains" },
+  "/opportunities": {
+    title: "Opportunities",
+    subtitle: "Deals linked to companies and contacts",
+  },
+  "/events": {
+    title: "Events",
+    subtitle: "Registrations for sales and delegates",
+  },
+  "/automations": { title: "Automations", subtitle: "Rules that keep work moving" },
+  "/team": { title: "Team", subtitle: "People and access" },
+  "/settings": { title: "Settings", subtitle: "Workspace administration" },
+  "/profile": { title: "Profile", subtitle: "Your account and security" },
+};
+
+const COLLAPSE_KEY = "kinetic.nav.collapsed";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [ready, setReady] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!accountRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,117 +195,401 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [router]);
 
+  useEffect(() => {
+    setMobileOpen(false);
+    setMenuOpen(false);
+  }, [pathname]);
+
+  const page = useMemo(() => {
+    const hit = Object.entries(PAGE_META).find(([path]) =>
+      pathname.startsWith(path),
+    );
+    return hit?.[1] || { title: "KINETIC", subtitle: "Workspace" };
+  }, [pathname]);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
     router.replace("/login");
     router.refresh();
   }
 
-  // Never paint CRM chrome or page content until the session is confirmed.
   if (!ready || !me) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg)]">
+      <div className="flex min-h-screen items-center justify-center">
         <p className="text-sm text-[var(--neo-muted)]">Verifying session…</p>
       </div>
     );
   }
 
   const perms = new Set(me.user.permissions || []);
+  const features = me.features || {};
   const initials =
     me.user.full_name
       ?.split(/\s+/)
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase())
-      .join("") || "SC";
+      .join("") || "K";
+
+  const groups = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((n) => {
+      if (!perms.has(n.perm)) return false;
+      if (n.feature && features[n.feature] === false) return false;
+      return true;
+    }),
+  })).filter((g) => g.items.length);
 
   return (
-    <div className="min-h-screen md:flex">
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 w-[272px] p-3 transition-transform duration-300 md:static md:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="shell-sidebar neo-raised flex h-full flex-col p-4">
-          <div className="mb-7 fade-up px-1">
-            <p className="display text-[1.7rem] text-[var(--accent)]">SecureCRM</p>
-            <p className="mt-1 text-sm text-[var(--neo-muted)]">
-              {me.organization.name}
-            </p>
+    <div
+      className={`app-shell ${collapsed ? "is-collapsed" : ""} ${
+        mobileOpen ? "is-mobile-open" : ""
+      }`}
+    >
+      <aside className="shell-nav" aria-label="Primary">
+        <div className="shell-nav-inner">
+          <div className="shell-brand">
+            <Link href="/dashboard" className="shell-brand-mark" title="KINETIC">
+              <span className="shell-brand-glyph">
+                <KineticEmblem size={34} />
+              </span>
+              <span className="shell-brand-text">
+                <span className="shell-brand-name">Kinetic</span>
+                <span className="shell-brand-org">{me.organization.name}</span>
+              </span>
+            </Link>
+            <button
+              type="button"
+              className="shell-collapse-btn"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+              title={collapsed ? "Expand" : "Collapse"}
+            >
+              <CollapseIcon collapsed={collapsed} />
+            </button>
           </div>
 
-          <nav className="flex flex-1 flex-col gap-1.5">
-            {NAV.filter((n) => perms.has(n.perm)).map((item) => {
-              const active = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`rounded-xl px-3 py-2.5 text-sm transition-all ${
-                    active
-                      ? "neo-pressed font-semibold text-[var(--accent-deep)]"
-                      : "text-[var(--ink-soft)] hover:bg-white/70"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+          <nav className="shell-nav-scroll">
+            {groups.map((group) => (
+              <div key={group.id} className="shell-nav-group">
+                <p className="shell-nav-label">{group.label}</p>
+                <ul>
+                  {group.items.map((item) => {
+                    const active = pathname.startsWith(item.href);
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className={`shell-nav-link ${active ? "is-active" : ""}`}
+                          title={item.label}
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          <NavIcon name={item.icon} />
+                          <span className="shell-nav-link-text">{item.label}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </nav>
 
-          <div className="mt-4 space-y-2">
+          <div className="shell-nav-foot">
             <Link
               href="/profile"
-              onClick={() => setOpen(false)}
-              className={`neo-inset flex items-center gap-3 p-3 transition hover:border-[var(--accent)] ${
-                pathname.startsWith("/profile") ? "neo-pressed" : ""
+              className={`shell-user-chip ${
+                pathname.startsWith("/profile") ? "is-active" : ""
               }`}
+              title={me.user.full_name}
+              onClick={() => setMobileOpen(false)}
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-deep)]">
-                {initials}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">
-                  {me.user.full_name}
-                </span>
-                <span className="block truncate text-xs text-[var(--neo-muted)]">
-                  {me.user.roles?.join(" · ") || "Account"}
+              <span className="shell-avatar">{initials}</span>
+              <span className="shell-user-meta">
+                <span className="shell-user-name">{me.user.full_name}</span>
+                <span className="shell-user-role">
+                  {me.user.roles?.[0] || "Member"}
                 </span>
               </span>
             </Link>
-            <button className="neo-btn w-full text-sm" onClick={logout}>
-              Sign out
-            </button>
           </div>
         </div>
       </aside>
 
-      {open && (
+      {mobileOpen ? (
         <button
-          className="fixed inset-0 z-30 bg-[rgba(20,32,28,0.28)] md:hidden"
-          aria-label="Close menu"
-          onClick={() => setOpen(false)}
+          type="button"
+          className="shell-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setMobileOpen(false)}
         />
-      )}
+      ) : null}
 
-      <div className="flex min-h-screen flex-1 flex-col">
-        <header className="sticky top-0 z-20 mx-3 mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-white/75 px-4 py-3 shadow-[var(--shadow-soft)] backdrop-blur-md md:mx-5 md:px-5">
-          <button className="neo-btn md:hidden" onClick={() => setOpen(true)}>
-            Menu
-          </button>
-          <div className="hidden md:block">
-            <p className="page-kicker">Workspace</p>
-            <p className="text-sm text-[var(--neo-muted)]">
-              Security · Accountability · Automation
-            </p>
+      <div className="shell-main">
+        <header className="shell-topbar">
+          <div className="shell-topbar-left">
+            <button
+              type="button"
+              className="shell-icon-btn shell-mobile-menu"
+              aria-label="Open navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <MenuIcon />
+            </button>
+            <div className="shell-page-meta min-w-0">
+              <p className="shell-context-org">{me.organization.name}</p>
+              <p className="shell-context-page">
+                <span>{page.title}</span>
+                <span className="shell-context-sep" aria-hidden>
+                  ·
+                </span>
+                <span className="shell-context-sub">{page.subtitle}</span>
+              </p>
+            </div>
           </div>
-          <Link href="/profile" className="neo-btn text-sm">
-            My profile
-          </Link>
+
+          <div className="shell-topbar-actions">
+            <NotificationCenter />
+            <div className="shell-account" ref={accountRef}>
+              <button
+                type="button"
+                className="shell-account-btn"
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                <span className="shell-avatar sm">{initials}</span>
+                <span className="shell-account-name">{me.user.full_name}</span>
+                <ChevronIcon />
+              </button>
+              {menuOpen ? (
+                <div className="shell-account-menu" role="menu">
+                  <p className="shell-account-email">{me.user.email}</p>
+                  {me.appVersion ? (
+                    <p className="shell-account-email">v{me.appVersion}</p>
+                  ) : null}
+                  <Link
+                    href="/profile"
+                    role="menuitem"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Profile & security
+                  </Link>
+                  {perms.has("settings:manage") ? (
+                    <Link
+                      href="/settings"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Workspace settings
+                    </Link>
+                  ) : null}
+                  <button type="button" role="menuitem" onClick={() => void logout()}>
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </header>
-        <main className="flex-1 px-4 pb-24 pt-5 md:px-6">{children}</main>
+
+        <main className="shell-content">{children}</main>
         <QuickFab />
       </div>
     </div>
+  );
+}
+
+function NavIcon({ name }: { name: NavItem["icon"] }) {
+  const common = {
+    width: 18,
+    height: 18,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    "aria-hidden": true as const,
+  };
+  switch (name) {
+    case "home":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "chart":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 19h16M7 16V9m5 7V5m5 11v-4"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "leads":
+      return (
+        <svg {...common}>
+          <path
+            d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+          <circle cx="9" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.7" />
+          <path
+            d="M19 8v6m3-3h-6"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "contacts":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.7" />
+          <path
+            d="M5 20a7 7 0 0 1 14 0"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "company":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 20V6.5A1.5 1.5 0 0 1 5.5 5H11v15H4Zm8 0V9h6.5A1.5 1.5 0 0 1 21 10.5V20h-9Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "bolt":
+      return (
+        <svg {...common}>
+          <path
+            d="M13 3 5 14h6l-1 7 9-12h-6l0-6Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "team":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+          <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.7" />
+          <path
+            d="M3.5 19a5.5 5.5 0 0 1 11 0M14 19a4 4 0 0 1 6.5-3.1"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "opp":
+      return (
+        <svg {...common}>
+          <path
+            d="M4 19V5h10l6 7-6 7H4Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    case "event":
+      return (
+        <svg {...common}>
+          <rect
+            x="3.5"
+            y="5"
+            width="17"
+            height="15"
+            rx="2"
+            stroke="currentColor"
+            strokeWidth="1.7"
+          />
+          <path
+            d="M3.5 10h17M8 3.5v3m8-3v3"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "gear":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.7" />
+          <path
+            d="M12 3.5v2.2m0 12.6v2.2M3.5 12h2.2m12.6 0h2.2m-14-5.5 1.6 1.6m11.2 11.2 1.6 1.6m0-14.4-1.6 1.6M6.7 16.7 5.1 18.3"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
+  }
+}
+
+function CollapseIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d={collapsed ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MenuIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 7h16M4 12h16M4 17h16"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 10l5 5 5-5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

@@ -1,13 +1,26 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
+import { logEmailScanForMatch } from "@/lib/email-activity";
 import { matchPerson } from "@/lib/match";
 
 const schema = z.object({
   fullName: z.string().max(200).optional().nullable(),
-  email: z.string().email().optional().nullable(),
+  email: z.preprocess(
+    (v) => (typeof v === "string" && !v.trim() ? null : v),
+    z.string().email().optional().nullable(),
+  ),
   linkedinUrl: z.string().max(500).optional().nullable(),
   companyName: z.string().max(200).optional().nullable(),
+  emailContext: z
+    .object({
+      subject: z.string().max(500).optional().nullable(),
+      fromEmail: z.string().max(320).optional().nullable(),
+      fromName: z.string().max(200).optional().nullable(),
+      sourceUrl: z.string().max(2000).optional().nullable(),
+      snippet: z.string().max(2000).optional().nullable(),
+    })
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,10 +53,29 @@ export async function POST(req: NextRequest) {
   const best = matches[0] || null;
   const close = best && best.score >= 70;
 
+  let activityLogged = false;
+  if (close && best && parsed.data.emailContext) {
+    const ctx = parsed.data.emailContext;
+    const result = await logEmailScanForMatch({
+      organizationId: user.organization_id,
+      actorUserId: user.id,
+      match: best,
+      email: {
+        subject: ctx.subject,
+        fromEmail: ctx.fromEmail || parsed.data.email,
+        fromName: ctx.fromName || parsed.data.fullName,
+        sourceUrl: ctx.sourceUrl,
+        snippet: ctx.snippet,
+      },
+    });
+    activityLogged = result.created || result.leadCreated;
+  }
+
   return json({
     closeMatch: close,
     best,
     matches,
     suggestAddLead: !close,
+    activityLogged,
   });
 }

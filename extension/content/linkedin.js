@@ -611,7 +611,7 @@
             onClick: () => SecureCRMTrain?.toggle?.(),
           },
         ],
-        { title: "SecureCRM · LinkedIn profile" },
+        { title: "KINETIC · LinkedIn profile" },
       );
       SecureCRMPanel.setStatus("Profile ready — open FAB to capture.");
       return;
@@ -667,7 +667,7 @@
           onClick: () => SecureCRMBadges.refresh(),
         },
       ],
-      { title: "SecureCRM · LinkedIn search" },
+      { title: "KINETIC · LinkedIn search" },
     );
   }
 

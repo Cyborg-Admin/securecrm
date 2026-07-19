@@ -1,19 +1,29 @@
 import { NextRequest } from "next/server";
 import { error, isResponse, json, requireUser } from "@/lib/api";
-import { getDbAsync } from "@/lib/db";
+import { getOrganization } from "@/lib/org";
+import { readFileSync } from "fs";
+import path from "path";
+
+function appVersion() {
+  try {
+    const pkg = JSON.parse(
+      readFileSync(
+        path.join(/* turbopackIgnore: true */ process.cwd(), "package.json"),
+        "utf8",
+      ),
+    ) as { version?: string };
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
 
 export async function GET(req: NextRequest) {
   const user = await requireUser(req);
   if (isResponse(user)) return user;
 
-  const db = await getDbAsync();
-  const org = await db
-    .prepare<{ id: string; name: string; slug: string }>(
-      "SELECT id, name, slug FROM organizations WHERE id = ?",
-    )
-    .get(user.organization_id);
-
-  if (!org) return error("Organization missing", 500);
+  const data = await getOrganization(user.organization_id);
+  if (!data) return error("Organization missing", 500);
 
   return json({
     user: {
@@ -24,7 +34,17 @@ export async function GET(req: NextRequest) {
       roles: user.roles,
       permissions: user.permissions,
     },
-    organization: org,
+    organization: {
+      id: data.org.id,
+      name: data.org.name,
+      slug: data.org.slug,
+    },
+    features: data.features,
+    settings: {
+      timezone: data.settings.timezone,
+      currency: data.settings.currency,
+    },
+    appVersion: appVersion(),
     csrfToken: user.csrf_secret === "api-key" ? null : user.csrf_secret,
   });
 }

@@ -22,7 +22,7 @@
     root.className = "scrm-fab-root";
     root.innerHTML = `
       <div class="scrm-fab-menu" id="scrm-fab-menu" hidden></div>
-      <button type="button" class="scrm-fab-main" id="scrm-fab-toggle" aria-label="SecureCRM actions" title="${opts.title || "SecureCRM"}">
+      <button type="button" class="scrm-fab-main" id="scrm-fab-toggle" aria-label="KINETIC actions" title="${opts.title || "KINETIC"}">
         <span class="scrm-fab-mark">S</span>
       </button>
     `;

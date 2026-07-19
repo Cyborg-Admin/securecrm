@@ -1,13 +1,11 @@
-@import url("https://fonts.cdnfonts.com/css/garet");
-
 #securecrm-panel {
   position: fixed;
   top: 16px;
   right: 16px;
   z-index: 2147483646;
   width: min(340px, calc(100vw - 24px));
-  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
-  color: #0a0a0a;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #14201c;
   display: none;
 }
 
@@ -37,8 +35,11 @@
 }
 
 #securecrm-panel .scrm-head strong {
-  color: #0a0a0a;
-  font-weight: 850;
+  color: #0a5c48;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
 }
 
 #securecrm-panel #scrm-close {
@@ -118,7 +119,7 @@
   right: 20px;
   bottom: 20px;
   z-index: 2147483645;
-  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, sans-serif;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -182,7 +183,7 @@
   font-weight: 700;
   line-height: 1.4;
   vertical-align: middle;
-  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, sans-serif;
   background: #e6f3ee;
   color: #0d7a5f;
   border: 1px solid #b7d8cb;
@@ -206,7 +207,7 @@
   left: 16px;
   bottom: 90px;
   z-index: 2147483646;
-  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, sans-serif;
   max-width: min(360px, calc(100vw - 24px));
 }
 
@@ -266,7 +267,7 @@
   justify-content: center;
   padding: 16px;
   background: rgba(0, 0, 0, 0.35);
-  font-family: "Garet", "Segoe UI", system-ui, sans-serif;
+  font-family: "Segoe UI", system-ui, sans-serif;
   color: #0a0a0a;
 }
 

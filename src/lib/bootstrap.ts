@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { ensureSchema, getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { PERMISSIONS, ROLE_TEMPLATES } from "@/lib/permissions";
+import { ensureDefaultStages } from "@/lib/pipelines";
 
 let bootstrapped = false;
 let bootstrapPromise: Promise<void> | null = null;
@@ -85,6 +86,15 @@ export async function bootstrapApp(): Promise<void> {
     }
 
     await ensurePrimaryAdmin();
+
+    // Sync new permissions onto system roles + seed pipelines for every tenant.
+    const orgs = await db
+      .prepare<{ id: string }>("SELECT id FROM organizations")
+      .all();
+    for (const org of orgs) {
+      await seedRolesForOrg(org.id);
+      await ensureDefaultStages(org.id);
+    }
 
     bootstrapped = true;
   })();

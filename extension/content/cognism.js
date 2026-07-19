@@ -200,7 +200,7 @@
           },
         },
       ],
-      { title: "SecureCRM · Cognism" },
+      { title: "KINETIC · Cognism" },
     );
   }
 

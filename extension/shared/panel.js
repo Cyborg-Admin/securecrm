@@ -8,7 +8,7 @@
     root.innerHTML = `
       <div class="scrm-card">
         <div class="scrm-head">
-          <strong>SecureCRM</strong>
+          <strong>KINETIC</strong>
           <button type="button" id="scrm-close" aria-label="Close">×</button>
         </div>
         <div id="scrm-body" class="scrm-body">Ready.</div>

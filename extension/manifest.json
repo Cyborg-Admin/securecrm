@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SecureCRM Lead Capture",
-  "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to SecureCRM.",
-  "version": "1.3.0",
+  "name": "KINETIC Lead Capture",
+  "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to KINETIC.",
+  "version": "1.4.0",
   "permissions": [
     "storage",
     "activeTab",
@@ -23,7 +23,7 @@
     "https://app.cognism.com/*"
   ],
   "action": {
-    "default_title": "SecureCRM",
+    "default_title": "KINETIC",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

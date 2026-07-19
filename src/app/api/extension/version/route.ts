@@ -3,7 +3,7 @@ import { json } from "@/lib/api";
 import { readFileSync } from "fs";
 import path from "path";
 
-const FALLBACK_VERSION = "1.3.0";
+const FALLBACK_VERSION = "1.4.0";
 
 function readExtensionVersion(): string {
   try {
@@ -30,11 +30,11 @@ export async function GET(req: NextRequest) {
     "http://localhost:3000";
 
   return json({
-    name: "SecureCRM Lead Capture",
+    name: "KINETIC Lead Capture",
     version,
     downloadUrl: `${base.replace(/\/$/, "")}/api/extension/download`,
     releaseNotes:
-      "Trainable scrape recipes, LinkedIn role/appointment history, sequential tab-group deep scrape.",
+      "Rebranded to KINETIC with new emblem. Reload the unpacked extension after update.",
     minAppVersion: "0.1.0",
     checkedAt: new Date().toISOString(),
   });

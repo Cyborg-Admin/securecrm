@@ -51,6 +51,7 @@
       companyName,
       linkedinUrl: linkedinMatch ? linkedinMatch[0] : null,
       subject,
+      snippet: (bodyText || "").slice(0, 600),
     };
   }
 
@@ -83,14 +84,24 @@
         email: person.email,
         companyName: person.companyName,
         linkedinUrl: person.linkedinUrl,
+        emailContext: {
+          subject: person.subject,
+          fromEmail: person.email,
+          fromName: person.fullName,
+          sourceUrl: location.href,
+          snippet: person.snippet,
+        },
       });
 
       lastFingerprint = fp;
 
       if (res.closeMatch && res.best) {
         const b = res.best;
+        const logged = res.activityLogged
+          ? "\nActivity logged on open"
+          : "";
         SecureCRMPanel.showPanel(
-          `Match (${b.score})\n${b.entity_type.toUpperCase()}: ${b.full_name}\n${b.job_title || ""}\n${b.company_name || b.email || ""}`,
+          `Match (${b.score})\n${b.entity_type.toUpperCase()}: ${b.full_name}\n${b.job_title || ""}\n${b.company_name || b.email || ""}${logged}`,
           [
             {
               label: "Dismiss",
@@ -138,6 +149,36 @@
                   sourceUrl: location.href,
                   leads: [filled],
                 });
+                const leadId = out.results?.[0]?.leadId;
+                if (leadId) {
+                  try {
+                    await SecureCRM.logActivity({
+                      entityType: "lead",
+                      entityId: leadId,
+                      activityType: "email_scanned",
+                      title: `Email captured: ${person.subject || "(no subject)"}`,
+                      body: [
+                        person.email
+                          ? `From: ${person.fullName || ""} <${person.email}>`.trim()
+                          : null,
+                        person.snippet || null,
+                      ]
+                        .filter(Boolean)
+                        .join("\n\n"),
+                      dedupeKey: `gmail-capture:${leadId}:${person.email || ""}:${person.subject || ""}`.slice(
+                        0,
+                        390,
+                      ),
+                      metadata: {
+                        subject: person.subject,
+                        fromEmail: person.email,
+                        sourceUrl: location.href,
+                      },
+                    });
+                  } catch {
+                    /* activity is best-effort */
+                  }
+                }
                 SecureCRMPanel.setStatus(
                   `Lead ${out.created ? "created" : "updated"} from Gmail.`,
                 );
@@ -189,7 +230,7 @@
           },
         },
       ],
-      { title: "SecureCRM · Gmail" },
+      { title: "KINETIC · Gmail" },
     );
   }
 

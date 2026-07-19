@@ -20,7 +20,7 @@ export async function GET() {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition":
-          'attachment; filename="securecrm-extension.zip"',
+          'attachment; filename="kinetic-extension.zip"',
         "Cache-Control": "no-store",
       },
     });

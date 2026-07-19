@@ -55,9 +55,9 @@ export async function GET(req: Request) {
 
   const result = await sendEmail({
     to,
-    subject: "SecureCRM mail health probe",
-    text: "If you received this, SendGrid delivery from SecureCRM is working.",
-    html: "<p>If you received this, SendGrid delivery from SecureCRM is working.</p>",
+    subject: "KINETIC mail health probe",
+    text: "If you received this, SendGrid delivery from KINETIC is working.",
+    html: "<p>If you received this, SendGrid delivery from KINETIC is working.</p>",
   });
 
   return json({ ...base, probe: result });
