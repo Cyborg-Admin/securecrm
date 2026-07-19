@@ -2,8 +2,16 @@
   "manifest_version": 3,
   "name": "SecureCRM Lead Capture",
   "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to SecureCRM.",
-  "version": "1.2.0",
-  "permissions": ["storage", "activeTab", "scripting", "sidePanel", "alarms"],
+  "version": "1.3.0",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "alarms",
+    "tabs",
+    "tabGroups"
+  ],
   "host_permissions": [
     "http://localhost:3000/*",
     "https://crm.cyborgwales.com/*",
@@ -42,6 +50,8 @@
       "js": [
         "shared/crm-api.js",
         "shared/history.js",
+        "shared/recipe.js",
+        "shared/train.js",
         "shared/panel.js",
         "shared/form.js",
         "shared/fab.js",

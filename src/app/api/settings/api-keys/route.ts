@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         "extension:match",
         "leads:write",
         "leads:read",
+        "settings:manage",
       ]),
     );
 

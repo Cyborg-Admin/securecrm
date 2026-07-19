@@ -28,6 +28,7 @@
 
     <nav class="tabs" role="tablist">
       <button type="button" class="tab active" data-tab="crm">CRM</button>
+      <button type="button" class="tab" data-tab="scrape">Scrape</button>
       <button type="button" class="tab" data-tab="history">History</button>
       <button type="button" class="tab" data-tab="settings">Settings</button>
     </nav>
@@ -39,6 +40,29 @@
       </label>
       <ul id="leadList" class="list"></ul>
       <p id="crmStatus" class="muted"></p>
+    </section>
+
+    <section id="tab-scrape" class="panel">
+      <h2 class="section-title" style="margin-top:0">Deep scrape</h2>
+      <p class="muted">
+        Opens LinkedIn profiles one-by-one in a SecureCRM tab group, scrapes roles, saves, closes.
+      </p>
+      <label class="field">
+        Profile URLs (one per line)
+        <textarea id="deepUrls" rows="6" placeholder="https://www.linkedin.com/in/…"></textarea>
+      </label>
+      <div class="row">
+        <button type="button" id="startDeep" class="primary">Start deep scrape</button>
+        <button type="button" id="stopDeep" class="ghost">Stop</button>
+      </div>
+      <p id="deepStatus" class="muted">Idle.</p>
+
+      <h2 class="section-title">Train mode</h2>
+      <label class="check">
+        <input id="trainMode" type="checkbox" />
+        Enable train mode on LinkedIn (click elements to map fields)
+      </label>
+      <p class="muted tiny">Owner-only workflow. Saves scrape recipes to the CRM.</p>
     </section>
 
     <section id="tab-history" class="panel">
@@ -76,6 +100,14 @@
       <label class="field">
         Bulk capture page limit
         <input id="bulkPageLimit" type="number" min="1" max="50" />
+      </label>
+      <label class="field">
+        Deep scrape delay (ms)
+        <input id="deepScrapeDelayMs" type="number" min="1000" max="15000" step="500" />
+      </label>
+      <label class="field">
+        Deep scrape max profiles / run
+        <input id="deepScrapeMaxProfiles" type="number" min="1" max="50" />
       </label>
       <label class="field">
         Compact CRM list size

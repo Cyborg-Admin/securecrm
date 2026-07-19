@@ -10,6 +10,9 @@
       "showFab",
       "bulkPageLimit",
       "compactCrmLimit",
+      "deepScrapeDelayMs",
+      "deepScrapeMaxProfiles",
+      "trainMode",
     ]);
     return {
       apiBase: (data.apiBase || DEFAULT_BASE).replace(/\/$/, ""),
@@ -19,6 +22,9 @@
       showFab: data.showFab !== false,
       bulkPageLimit: Number(data.bulkPageLimit) || 10,
       compactCrmLimit: Number(data.compactCrmLimit) || 25,
+      deepScrapeDelayMs: Number(data.deepScrapeDelayMs) || 3000,
+      deepScrapeMaxProfiles: Number(data.deepScrapeMaxProfiles) || 25,
+      trainMode: Boolean(data.trainMode),
     };
   }
 
@@ -118,6 +124,7 @@
 
   window.SecureCRM = {
     getConfig,
+    crmFetch,
     captureLeads,
     matchPerson,
     lookupLinkedIn,

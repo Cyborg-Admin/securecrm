@@ -3,7 +3,7 @@ import { json } from "@/lib/api";
 import { readFileSync } from "fs";
 import path from "path";
 
-const FALLBACK_VERSION = "1.2.0";
+const FALLBACK_VERSION = "1.3.0";
 
 function readExtensionVersion(): string {
   try {
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     version,
     downloadUrl: `${base.replace(/\/$/, "")}/api/extension/download`,
     releaseNotes:
-      "Pinned side panel, scanning settings, capture history, LinkedIn in-CRM badges, and update checks.",
+      "Trainable scrape recipes, LinkedIn role/appointment history, sequential tab-group deep scrape.",
     minAppVersion: "0.1.0",
     checkedAt: new Date().toISOString(),
   });

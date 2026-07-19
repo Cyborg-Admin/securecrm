@@ -8,6 +8,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "history") renderHistory();
     if (tab.dataset.tab === "crm") searchLeads();
+    if (tab.dataset.tab === "scrape") refreshDeepStatus();
   });
 });
 
@@ -20,6 +21,9 @@ async function loadSettings() {
     "showFab",
     "bulkPageLimit",
     "compactCrmLimit",
+    "deepScrapeDelayMs",
+    "deepScrapeMaxProfiles",
+    "trainMode",
   ]);
   $("apiBase").value = data.apiBase || "https://crm.cyborgwales.com";
   $("apiKey").value = data.apiKey || "";
@@ -28,6 +32,9 @@ async function loadSettings() {
   $("showFab").checked = data.showFab !== false;
   $("bulkPageLimit").value = data.bulkPageLimit ?? 10;
   $("compactCrmLimit").value = data.compactCrmLimit ?? 25;
+  $("deepScrapeDelayMs").value = data.deepScrapeDelayMs ?? 3000;
+  $("deepScrapeMaxProfiles").value = data.deepScrapeMaxProfiles ?? 25;
+  $("trainMode").checked = Boolean(data.trainMode);
   $("localVersion").textContent = chrome.runtime.getManifest().version;
 }
 
@@ -40,9 +47,21 @@ $("saveSettings").addEventListener("click", async () => {
     showFab: $("showFab").checked,
     bulkPageLimit: Math.min(50, Math.max(1, Number($("bulkPageLimit").value) || 10)),
     compactCrmLimit: Math.min(50, Math.max(5, Number($("compactCrmLimit").value) || 25)),
+    deepScrapeDelayMs: Math.min(
+      15000,
+      Math.max(1000, Number($("deepScrapeDelayMs").value) || 3000),
+    ),
+    deepScrapeMaxProfiles: Math.min(
+      50,
+      Math.max(1, Number($("deepScrapeMaxProfiles").value) || 25),
+    ),
   });
   $("settingsStatus").textContent = "Saved. Reload LinkedIn / Gmail tabs for FAB & badges.";
   chrome.runtime.sendMessage({ type: "CHECK_UPDATE" });
+});
+
+$("trainMode").addEventListener("change", async () => {
+  await chrome.storage.sync.set({ trainMode: $("trainMode").checked });
 });
 
 async function renderUpdate() {
@@ -83,15 +102,10 @@ async function searchLeads() {
     for (const lead of leads) {
       const li = document.createElement("li");
       const company = lead.company_display || lead.company_name || "";
-      li.innerHTML = `
-        <strong></strong>
-        <span></span>
-        <span></span>
-      `;
+      li.innerHTML = `<strong></strong><span></span><span></span>`;
       li.querySelector("strong").textContent = lead.full_name || "Untitled";
-      li.querySelectorAll("span")[0].textContent = [lead.job_title, company]
-        .filter(Boolean)
-        .join(" · ") || "No title";
+      li.querySelectorAll("span")[0].textContent =
+        [lead.job_title, company].filter(Boolean).join(" · ") || "No title";
       li.querySelectorAll("span")[1].textContent = `${lead.status || "—"} · ${lead.source || "—"}`;
       list.appendChild(li);
     }
@@ -131,7 +145,57 @@ $("clearHistory").addEventListener("click", async () => {
   renderHistory();
 });
 
+function parseUrls(text) {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => /linkedin\.com\/in\//i.test(l));
+}
+
+$("startDeep").addEventListener("click", async () => {
+  const urls = parseUrls($("deepUrls").value);
+  if (!urls.length) {
+    $("deepStatus").textContent = "Paste at least one LinkedIn /in/ URL.";
+    return;
+  }
+  $("deepStatus").textContent = `Starting ${urls.length}…`;
+  await chrome.runtime.sendMessage({ type: "START_DEEP_SCRAPE", urls });
+  refreshDeepStatus();
+});
+
+$("stopDeep").addEventListener("click", async () => {
+  await chrome.runtime.sendMessage({ type: "STOP_DEEP_SCRAPE" });
+  refreshDeepStatus();
+});
+
+async function refreshDeepStatus() {
+  try {
+    const live = await chrome.runtime.sendMessage({
+      type: "GET_DEEP_SCRAPE_STATUS",
+    });
+    if (live?.status) {
+      $("deepStatus").textContent =
+        `${live.status} · done ${live.done || 0} · left ${live.remaining || 0}` +
+        (live.running ? " (running)" : "");
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  const { deepScrapeStatus } = await chrome.storage.local.get(["deepScrapeStatus"]);
+  if (deepScrapeStatus?.status) {
+    $("deepStatus").textContent = deepScrapeStatus.status;
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.deepScrapeStatus) refreshDeepStatus();
+});
+
+setInterval(refreshDeepStatus, 2000);
+
 loadSettings()
   .then(renderUpdate)
   .then(searchLeads)
+  .then(refreshDeepStatus)
   .catch(() => {});

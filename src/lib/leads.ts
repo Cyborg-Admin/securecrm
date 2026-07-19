@@ -5,6 +5,10 @@ import { upsertCompany } from "@/lib/companies";
 import { writeAudit } from "@/lib/audit";
 import { runAutomations } from "@/lib/automation";
 import { parseJsonObject } from "@/lib/json";
+import {
+  replaceLeadExperiences,
+  type ExperienceInput,
+} from "@/lib/experiences";
 
 export type LeadCaptureInput = {
   organizationId: string;
@@ -22,6 +26,7 @@ export type LeadCaptureInput = {
   ownerUserId?: string | null;
   metadata?: Record<string, unknown>;
   batchId?: string | null;
+  experiences?: ExperienceInput[];
 };
 
 export type LeadRow = {
@@ -138,6 +143,14 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
       after: lead,
     });
 
+    if (input.experiences?.length) {
+      await replaceLeadExperiences({
+        organizationId: input.organizationId,
+        leadId: lead.id,
+        experiences: input.experiences,
+      });
+    }
+
     return { lead, created: false, companyId };
   }
 
@@ -183,6 +196,14 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
     entityId: id,
     after: lead,
   });
+
+  if (input.experiences?.length) {
+    await replaceLeadExperiences({
+      organizationId: input.organizationId,
+      leadId: lead.id,
+      experiences: input.experiences,
+    });
+  }
 
   await runAutomations({
     organizationId: input.organizationId,

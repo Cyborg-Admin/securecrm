@@ -172,26 +172,161 @@
     };
   }
 
-  function scrapeProfile() {
+  function scrapeExperiences() {
+    const experiences = [];
+    const roots = [
+      ...document.querySelectorAll("#experience ~ div, #experience + div"),
+      ...document.querySelectorAll(
+        'section[id*="experience" i], section[data-section="experience"]',
+      ),
+      ...document.querySelectorAll(
+        '.pvs-list__container, .experience-section, [data-view-name="profile-component-entity"]',
+      ),
+    ];
+
+    const cards = new Set();
+    for (const root of roots) {
+      for (const li of root.querySelectorAll(
+        "li, .pvs-entity, [data-view-name='profile-component-entity']",
+      )) {
+        cards.add(li);
+      }
+    }
+
+    // Also scan profile main for experience-like blocks
+    if (!cards.size) {
+      for (const li of document.querySelectorAll("main li")) {
+        const t = SecureCRM.text(li).slice(0, 200);
+        if (/present|·|–|-|\d{4}/i.test(t) && t.length > 20) cards.add(li);
+      }
+    }
+
+    let order = 0;
+    for (const card of cards) {
+      const text = SecureCRM.text(card).slice(0, 500);
+      if (!text || text.length < 8) continue;
+      if (/^see more|^show all/i.test(text)) continue;
+
+      const title =
+        SecureCRM.text(
+          card.querySelector(
+            '.t-bold span[aria-hidden="true"], .mr1.t-bold span[aria-hidden="true"], h3, .hoverable-link-text',
+          ),
+        ) ||
+        text.split(/[·|]/)[0]?.trim() ||
+        null;
+
+      const companyLink = card.querySelector('a[href*="/company/"]');
+      const companyName =
+        SecureCRM.text(
+          card.querySelector(
+            '.t-14.t-normal span[aria-hidden="true"], .t-14.t-normal',
+          ),
+        ) ||
+        SecureCRM.text(companyLink) ||
+        null;
+
+      const dateLine =
+        SecureCRM.text(
+          card.querySelector(
+            '.pvs-entity__caption-wrapper, .t-14.t-normal.t-black--light span[aria-hidden="true"]',
+          ),
+        ) || "";
+      const isCurrent = /present/i.test(dateLine) || /present/i.test(text);
+      let startedOn = null;
+      let endedOn = null;
+      const range = dateLine.match(
+        /([A-Za-z]{3,9}\s+\d{4}|\d{4})\s*[-–—]\s*([A-Za-z]{3,9}\s+\d{4}|\d{4}|Present)/i,
+      );
+      if (range) {
+        startedOn = range[1];
+        endedOn = /present/i.test(range[2]) ? null : range[2];
+      }
+
+      if (!title && !companyName) continue;
+      // Skip obvious non-experience noise
+      if (/^activity|^about|^education/i.test(title || "")) continue;
+
+      experiences.push({
+        title,
+        companyName,
+        companyLinkedinUrl: companyLink?.href || null,
+        location: null,
+        startedOn,
+        endedOn,
+        isCurrent,
+        rawText: text,
+        sortOrder: order++,
+      });
+      if (experiences.length >= 40) break;
+    }
+
+    // Deduplicate by title+company
+    const seen = new Set();
+    return experiences.filter((e) => {
+      const k = `${(e.title || "").toLowerCase()}|${(e.companyName || "").toLowerCase()}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
+  async function scrapeProfile() {
     const slug = profileSlugFromUrl();
     const fromCode = scrapeFromEmbeddedCode(slug);
     const fromDom = scrapeProfileDom();
     if (!fromCode && !fromDom) return null;
+
+    let fields = {};
+    try {
+      fields = (await SecureCRMRecipe?.loadRecipe?.("linkedin")) || {};
+    } catch {
+      fields = {};
+    }
+
+    const trained = {
+      fullName: SecureCRMRecipe?.applyField?.(fields, "fullName"),
+      jobTitle: SecureCRMRecipe?.applyField?.(fields, "jobTitle"),
+      companyName: SecureCRMRecipe?.applyField?.(fields, "companyName"),
+      location: SecureCRMRecipe?.applyField?.(fields, "location"),
+      headline: SecureCRMRecipe?.applyField?.(fields, "headline"),
+    };
+
+    const experiences = scrapeExperiences();
+    const current = experiences.find((e) => e.isCurrent) || experiences[0];
+
     return {
       linkedinUrl:
         fromDom?.linkedinUrl ||
         fromCode?.linkedinUrl ||
         SecureCRM.normalizeLinkedIn(location.href),
-      fullName: fromDom?.fullName || fromCode?.fullName,
-      jobTitle: fromDom?.jobTitle || fromCode?.jobTitle || null,
-      companyName: fromDom?.companyName || fromCode?.companyName || null,
+      fullName:
+        trained.fullName || fromDom?.fullName || fromCode?.fullName,
+      jobTitle:
+        trained.jobTitle ||
+        fromDom?.jobTitle ||
+        fromCode?.jobTitle ||
+        current?.title ||
+        null,
+      companyName:
+        trained.companyName ||
+        fromDom?.companyName ||
+        fromCode?.companyName ||
+        current?.companyName ||
+        null,
       industry: fromDom?.industry || fromCode?.industry || null,
       website: fromDom?.website || fromCode?.website || null,
-      location: fromDom?.location || fromCode?.location || null,
-      headline: fromDom?.headline || fromCode?.headline || null,
+      location:
+        trained.location || fromDom?.location || fromCode?.location || null,
+      headline:
+        trained.headline || fromDom?.headline || fromCode?.headline || null,
+      experiences,
       metadata: {
         page: "profile",
-        sources: [fromDom && "dom", fromCode && "code"].filter(Boolean),
+        sources: [fromDom && "dom", fromCode && "code", experiences.length && "experience"].filter(
+          Boolean,
+        ),
+        recipeFields: Object.keys(fields),
       },
     };
   }
@@ -333,7 +468,7 @@
   async function captureCurrentProfile() {
     SecureCRMPanel.setStatus("Reading profile…");
     await sleep(400);
-    let lead = scrapeProfile();
+    let lead = await scrapeProfile();
     if (!lead?.fullName) {
       lead = await SecureCRMForm.showLeadForm({
         linkedinUrl: SecureCRM.normalizeLinkedIn(location.href),
@@ -470,6 +605,11 @@
                 SecureCRMPanel.setStatus(e.message),
               ),
           },
+          {
+            id: "train",
+            label: "Toggle train mode",
+            onClick: () => SecureCRMTrain?.toggle?.(),
+          },
         ],
         { title: "SecureCRM · LinkedIn profile" },
       );
@@ -492,12 +632,34 @@
           onClick: () => runBulk(),
         },
         {
+          id: "deep",
+          label: "Deep scrape profiles",
+          onClick: () => {
+            const urls = scrapeSearchResults()
+              .map((l) => l.linkedinUrl)
+              .filter(Boolean);
+            chrome.runtime.sendMessage({
+              type: "START_DEEP_SCRAPE",
+              urls,
+            });
+            SecureCRMPanel.setStatus(
+              `Queued ${urls.length} profiles for deep scrape…`,
+            );
+          },
+        },
+        {
           id: "stop",
-          label: "Stop bulk",
+          label: "Stop bulk / deep",
           onClick: () => {
             bulkRunning = false;
-            SecureCRMPanel.setStatus("Bulk capture stopped.");
+            chrome.runtime.sendMessage({ type: "STOP_DEEP_SCRAPE" });
+            SecureCRMPanel.setStatus("Stopped.");
           },
+        },
+        {
+          id: "train",
+          label: "Toggle train mode",
+          onClick: () => SecureCRMTrain?.toggle?.(),
         },
         {
           id: "badges",
@@ -516,12 +678,17 @@
     SecureCRMBadges.refresh();
     if (isProfilePage()) {
       setTimeout(() => {
-        const lead = scrapeProfile();
-        SecureCRMPanel.setStatus(
-          lead?.fullName
-            ? `Opened ${lead.fullName} — ready to capture.`
-            : "Profile opened — ready to capture.",
-        );
+        scrapeProfile()
+          .then((lead) => {
+            SecureCRMPanel.setStatus(
+              lead?.fullName
+                ? `Opened ${lead.fullName} — ready to capture.`
+                : "Profile opened — ready to capture.",
+            );
+          })
+          .catch(() =>
+            SecureCRMPanel.setStatus("Profile opened — ready to capture."),
+          );
       }, 700);
     }
   }
@@ -548,4 +715,35 @@
       mountFab(true);
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "SCRM_SCRAPE_PROFILE") {
+      (async () => {
+        try {
+          await sleep(500);
+          const lead = await scrapeProfile();
+          if (!lead?.fullName) {
+            sendResponse({ ok: false, error: "Could not scrape profile" });
+            return;
+          }
+          sendResponse({ ok: true, lead });
+        } catch (e) {
+          sendResponse({ ok: false, error: e.message || "Scrape failed" });
+        }
+      })();
+      return true;
+    }
+    if (msg?.type === "SCRM_COLLECT_SEARCH_URLS") {
+      try {
+        const urls = scrapeSearchResults()
+          .map((l) => l.linkedinUrl)
+          .filter(Boolean);
+        sendResponse({ ok: true, urls });
+      } catch (e) {
+        sendResponse({ ok: false, error: e.message, urls: [] });
+      }
+      return false;
+    }
+    return false;
+  });
 })();

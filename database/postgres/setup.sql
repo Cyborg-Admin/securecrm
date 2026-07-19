@@ -139,6 +139,41 @@ CREATE INDEX IF NOT EXISTS idx_leads_org_status ON leads(organization_id, status
 CREATE INDEX IF NOT EXISTS idx_leads_org_company ON leads(organization_id, company_id);
 CREATE INDEX IF NOT EXISTS idx_leads_name ON leads(organization_id, full_name);
 
+CREATE TABLE IF NOT EXISTS lead_experiences (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  lead_id               UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  title                 TEXT,
+  company_name          TEXT,
+  company_linkedin_url  TEXT,
+  location              TEXT,
+  started_on            TEXT,
+  ended_on              TEXT,
+  is_current            BOOLEAN NOT NULL DEFAULT FALSE,
+  raw_text              TEXT,
+  sort_order            INTEGER NOT NULL DEFAULT 0,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lead_experiences_org_lead
+  ON lead_experiences(organization_id, lead_id);
+
+CREATE TABLE IF NOT EXISTS scrape_recipes (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  source          TEXT NOT NULL,
+  version         INTEGER NOT NULL DEFAULT 1,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  fields_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scrape_recipes_org_source
+  ON scrape_recipes(organization_id, source, is_active);
+
 CREATE TABLE IF NOT EXISTS contacts (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

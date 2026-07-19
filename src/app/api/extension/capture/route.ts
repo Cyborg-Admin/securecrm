@@ -5,6 +5,18 @@ import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 import { captureLead } from "@/lib/leads";
 
+const experienceSchema = z.object({
+  title: z.string().max(300).optional().nullable(),
+  companyName: z.string().max(300).optional().nullable(),
+  companyLinkedinUrl: z.string().max(500).optional().nullable(),
+  location: z.string().max(300).optional().nullable(),
+  startedOn: z.string().max(80).optional().nullable(),
+  endedOn: z.string().max(80).optional().nullable(),
+  isCurrent: z.boolean().optional(),
+  rawText: z.string().max(2000).optional().nullable(),
+  sortOrder: z.number().int().min(0).max(200).optional(),
+});
+
 const leadSchema = z.object({
   linkedinUrl: z.string().min(5).max(500),
   fullName: z.string().min(1).max(200),
@@ -15,6 +27,7 @@ const leadSchema = z.object({
   location: z.string().max(200).optional().nullable(),
   headline: z.string().max(500).optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  experiences: z.array(experienceSchema).max(50).optional(),
 });
 
 const schema = z.object({

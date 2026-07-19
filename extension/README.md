@@ -1,31 +1,25 @@
-# SecureCRM Chrome Extension (v1.2.0)
+# SecureCRM Chrome Extension (v1.3.0)
 
 ## Install / update
 
 1. Open `chrome://extensions` → enable **Developer mode**
 2. **Load unpacked** → select this `extension/` folder  
-   Or download a zip from your CRM: `/api/extension/download`
-3. After pulling updates: click **Reload** on the extension card
+   Or download: `/api/extension/download`
+3. After updates: **Reload** the extension card
 
-The extension checks `/api/extension/version` every few hours and shows an **UP** badge + side-panel banner when a newer build is available. Unpacked extensions do not auto-overwrite — reload/reinstall the folder or unzipped download.
+## Features
 
-## Use
+- **Side panel** — connection, CRM search, history, deep scrape, train mode
+- **FAB** — capture / bulk / deep scrape / train on LinkedIn
+- **In-CRM badges** on LinkedIn search results
+- **Train mode** — click page elements to map scrape fields (saved as CRM recipes)
+- **Deep scrape** — opens profiles one-by-one in a `SecureCRM` tab group, scrapes experience history, saves, closes
+- **Role history** — previous appointments stored on the lead in the CRM
 
-1. Click the toolbar icon → **pinned side panel** opens (settings, history, compact lead search)
-2. Create an API key in CRM → **Settings**, paste it in the side panel
-3. On LinkedIn / Sales Nav / Cognism / Gmail, use the bottom-right **FAB (S)** menu
-4. On LinkedIn people search, **Lead** / **CRM ✓** badges mark profiles already in SecureCRM
+## Settings
 
-## Settings (side panel)
-
-- CRM base URL + API key
-- In-CRM badges on LinkedIn
-- Auto-scan Gmail
-- Show/hide FAB
+- API base + key
+- Badges / Gmail auto-scan / FAB
 - Bulk page limit
-- Compact CRM list size
-- Capture history (local)
-
-## Pin the side panel
-
-Open the side panel once, then pin it from Chrome’s side-panel UI so it stays available while you browse.
+- Deep scrape delay + max profiles
+- Train mode toggle

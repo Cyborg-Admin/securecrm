@@ -23,10 +23,22 @@ type Lead = {
   company_id?: string | null;
 };
 
+type Experience = {
+  id: string;
+  title: string | null;
+  company_name: string | null;
+  location: string | null;
+  started_on: string | null;
+  ended_on: string | null;
+  is_current: boolean | number;
+  raw_text: string | null;
+};
+
 type Related = {
   company: { id: string; name: string; domain: string | null } | null;
   contact: { id: string; full_name: string; email: string | null } | null;
   siblingLeads: Array<{ id: string; full_name: string; job_title: string | null; status: string }>;
+  experiences?: Experience[];
 };
 
 function LeadsInner() {
@@ -260,6 +272,36 @@ function LeadsInner() {
                       ))}
                     </ul>
                   </div>
+                )}
+              </div>
+
+              <div className="neo-inset space-y-2 p-3 text-sm">
+                <p className="font-medium">Roles / history</p>
+                {related?.experiences?.length ? (
+                  <ul className="space-y-2">
+                    {related.experiences.map((exp) => (
+                      <li key={exp.id} className="border-t border-[var(--line)] pt-2 first:border-0 first:pt-0">
+                        <p className="font-medium">
+                          {exp.title || "Role"}
+                          {exp.is_current ? (
+                            <span className="ml-2 text-xs text-[var(--accent-deep)]">Current</span>
+                          ) : null}
+                        </p>
+                        <p className="text-[var(--neo-muted)]">
+                          {[exp.company_name, exp.location].filter(Boolean).join(" · ") || "—"}
+                        </p>
+                        <p className="text-xs text-[var(--neo-muted)]">
+                          {[exp.started_on, exp.ended_on || (exp.is_current ? "Present" : null)]
+                            .filter(Boolean)
+                            .join(" – ") || exp.raw_text?.slice(0, 120) || ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[var(--neo-muted)]">
+                    No appointment history yet — deep-scrape the LinkedIn profile.
+                  </p>
                 )}
               </div>
             </div>

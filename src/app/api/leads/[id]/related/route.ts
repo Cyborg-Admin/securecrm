@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { getDbAsync } from "@/lib/db";
+import { listLeadExperiences } from "@/lib/experiences";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -52,5 +53,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
         .all(user.organization_id, lead.company_id, lead.id)
     : [];
 
-  return json({ company, contact, siblingLeads });
+  let experiences: Awaited<ReturnType<typeof listLeadExperiences>> = [];
+  try {
+    experiences = await listLeadExperiences(user.organization_id, lead.id);
+  } catch {
+    experiences = [];
+  }
+
+  return json({ company, contact, siblingLeads, experiences });
 }
