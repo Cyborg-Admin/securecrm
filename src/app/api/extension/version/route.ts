@@ -3,7 +3,7 @@ import { json } from "@/lib/api";
 import { readFileSync } from "fs";
 import path from "path";
 
-const FALLBACK_VERSION = "1.4.0";
+const FALLBACK_VERSION = "1.5.0";
 
 function readExtensionVersion(): string {
   try {
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     version,
     downloadUrl: `${base.replace(/\/$/, "")}/api/extension/download`,
     releaseNotes:
-      "Rebranded to KINETIC with new emblem. Reload the unpacked extension after update.",
+      "Enrich: compare page vs CRM, fill missing fields, overwrite mismatches. Reload unpacked extension.",
     minAppVersion: "0.1.0",
     checkedAt: new Date().toISOString(),
   });

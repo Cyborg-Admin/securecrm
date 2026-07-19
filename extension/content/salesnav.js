@@ -192,6 +192,26 @@
               }
             },
           },
+          {
+            id: "enrich",
+            label: "Enrich from page",
+            onClick: async () => {
+              try {
+                SecureCRMPanel.setStatus("Enriching from Sales Nav…");
+                const enricher = new KineticEnrichment({
+                  source: SOURCE,
+                  overwriteMismatches: true,
+                  scrape: () => scrapeProfile(),
+                });
+                const result = await enricher.run();
+                SecureCRMPanel.setStatus(
+                  KineticEnrichment.formatReport(result),
+                );
+              } catch (e) {
+                SecureCRMPanel.setStatus(e.message);
+              }
+            },
+          },
         ],
         { title: "KINETIC · Sales Nav" },
       );

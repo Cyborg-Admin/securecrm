@@ -1,4 +1,4 @@
-# KINETIC Chrome Extension (v1.4.0)
+# KINETIC Chrome Extension (v1.5.0)
 
 ## Install / update
 
@@ -14,6 +14,7 @@
 - **In-CRM badges** on LinkedIn search results
 - **Train mode** — click page elements to map scrape fields (saved as CRM recipes)
 - **Deep scrape** — opens profiles one-by-one in a `KINETIC` tab group, scrapes experience history, saves, closes
+- **Enrich** — `KineticEnrichment` class compares page vs CRM, fills missing fields, overwrites mismatches (`run({ dryRun: true })` for future automation)
 - **Role history** — previous appointments stored on the lead in the CRM
 
 ## Settings

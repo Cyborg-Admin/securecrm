@@ -499,6 +499,34 @@
     );
   }
 
+  function createProfileEnricher() {
+    return new KineticEnrichment({
+      source: SOURCE,
+      overwriteMismatches: true,
+      scrape: async () => {
+        await sleep(400);
+        const lead = await scrapeProfile();
+        if (!lead) return null;
+        return {
+          ...lead,
+          metadata: { ...(lead.metadata || {}), enrich: true },
+        };
+      },
+    });
+  }
+
+  async function enrichCurrentProfile() {
+    SecureCRMPanel.setStatus("Enriching from profile…");
+    const enricher = createProfileEnricher();
+    const result = await enricher.run();
+    SecureCRMPanel.setStatus(KineticEnrichment.formatReport(result));
+    try {
+      SecureCRMBadges?.refresh?.();
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function capturePage() {
     SecureCRMPanel.setStatus("Scanning page for profiles…");
     await sleep(300);
@@ -606,6 +634,14 @@
               ),
           },
           {
+            id: "enrich",
+            label: "Enrich from page",
+            onClick: () =>
+              enrichCurrentProfile().catch((e) =>
+                SecureCRMPanel.setStatus(e.message),
+              ),
+          },
+          {
             id: "train",
             label: "Toggle train mode",
             onClick: () => SecureCRMTrain?.toggle?.(),
@@ -613,7 +649,7 @@
         ],
         { title: "KINETIC · LinkedIn profile" },
       );
-      SecureCRMPanel.setStatus("Profile ready — open FAB to capture.");
+      SecureCRMPanel.setStatus("Profile ready — Capture or Enrich.");
       return;
     }
 

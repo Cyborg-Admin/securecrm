@@ -74,6 +74,13 @@
     });
   }
 
+  async function enrich(payload) {
+    return crmFetch("/api/extension/enrich", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
   async function lookupLinkedIn(urls) {
     const unique = [...new Set((urls || []).filter(Boolean))].slice(0, 150);
     if (!unique.length) return { results: {} };
@@ -135,6 +142,7 @@
     captureLeads,
     matchPerson,
     logActivity,
+    enrich,
     lookupLinkedIn,
     searchLeads,
     fetchVersion,

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "KINETIC Lead Capture",
   "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to KINETIC.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "permissions": [
     "storage",
     "activeTab",
@@ -51,6 +51,7 @@
         "shared/crm-api.js",
         "shared/history.js",
         "shared/recipe.js",
+        "shared/enrichment.js",
         "shared/train.js",
         "shared/panel.js",
         "shared/form.js",
@@ -69,6 +70,7 @@
       "js": [
         "shared/crm-api.js",
         "shared/history.js",
+        "shared/enrichment.js",
         "shared/panel.js",
         "shared/form.js",
         "shared/fab.js",
