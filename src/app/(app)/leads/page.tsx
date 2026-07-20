@@ -2,13 +2,13 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { LeadRecordDrawer, type Lead } from "@/components/LeadRecordDrawer";
 import {
   PipelineMiniBar,
   type PipelineStage,
 } from "@/components/PipelineStepper";
 import { QuickCreateModal } from "@/components/QuickCreateModal";
+import { PageListSkeleton, RecordListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/client-api";
 
 function LeadsInner() {
@@ -19,16 +19,21 @@ function LeadsInner() {
   const [selected, setSelected] = useState<Lead | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   async function load(query = q) {
-    const data = await api<{ leads: Lead[] }>(
-      `/api/leads?q=${encodeURIComponent(query)}`,
-    );
-    setLeads(data.leads);
-    const openId = search.get("open");
-    if (openId) {
-      const found = data.leads.find((l) => l.id === openId);
-      if (found) openLead(found);
+    try {
+      const data = await api<{ leads: Lead[] }>(
+        `/api/leads?q=${encodeURIComponent(query)}`,
+      );
+      setLeads(data.leads);
+      const openId = search.get("open");
+      if (openId) {
+        const found = data.leads.find((l) => l.id === openId);
+        if (found) openLead(found);
+      }
+    } finally {
+      setInitialLoading(false);
     }
   }
 
@@ -84,47 +89,51 @@ function LeadsInner() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <ul className="mt-4 max-h-[70vh] space-y-2 overflow-auto">
-          {leads.map((lead) => (
-            <li key={lead.id}>
-              <button
-                className={`w-full rounded-2xl p-3 text-left transition ${
-                  selected?.id === lead.id && drawerOpen
-                    ? "neo-pressed"
-                    : "neo-inset hover:opacity-95"
-                }`}
-                onClick={() => openLead(lead)}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-medium">{lead.full_name}</p>
-                    <p className="text-sm text-[var(--neo-muted)]">
-                      {[lead.job_title, lead.company_name]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
+        {initialLoading ? (
+          <RecordListSkeleton />
+        ) : (
+          <ul className="mt-4 max-h-[70vh] space-y-2 overflow-auto">
+            {leads.map((lead) => (
+              <li key={lead.id}>
+                <button
+                  className={`w-full rounded-2xl p-3 text-left transition ${
+                    selected?.id === lead.id && drawerOpen
+                      ? "neo-pressed"
+                      : "neo-inset hover:opacity-95"
+                  }`}
+                  onClick={() => openLead(lead)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium">{lead.full_name}</p>
+                      <p className="text-sm text-[var(--neo-muted)]">
+                        {[lead.job_title, lead.company_name]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    {pipelineStages.length ? (
+                      <PipelineMiniBar
+                        stages={pipelineStages}
+                        currentStatus={lead.status}
+                      />
+                    ) : (
+                      <span className="record-chip shrink-0">{lead.status}</span>
+                    )}
                   </div>
-                  {pipelineStages.length ? (
-                    <PipelineMiniBar
-                      stages={pipelineStages}
-                      currentStatus={lead.status}
-                    />
-                  ) : (
-                    <span className="record-chip shrink-0">{lead.status}</span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-[var(--neo-muted)]">
-                  {lead.source} · {lead.owner_name || "Unassigned"}
-                </p>
-              </button>
-            </li>
-          ))}
-          {!leads.length ? (
-            <li className="py-8 text-center text-sm text-[var(--neo-muted)]">
-              No leads yet — capture from LinkedIn or add one manually.
-            </li>
-          ) : null}
-        </ul>
+                  <p className="mt-1 text-xs text-[var(--neo-muted)]">
+                    {lead.source} · {lead.owner_name || "Unassigned"}
+                  </p>
+                </button>
+              </li>
+            ))}
+            {!leads.length ? (
+              <li className="py-8 text-center text-sm text-[var(--neo-muted)]">
+                No leads yet — capture from LinkedIn or add one manually.
+              </li>
+            ) : null}
+          </ul>
+        )}
       </section>
 
       <LeadRecordDrawer
@@ -132,9 +141,31 @@ function LeadsInner() {
         open={drawerOpen}
         onClose={closeDrawer}
         onLeadUpdated={(updated) => {
-          setSelected(updated);
+          setSelected((prev) =>
+            prev && prev.id === updated.id
+              ? {
+                  ...prev,
+                  ...updated,
+                  owner_name: updated.owner_name ?? prev.owner_name,
+                  owner_user_id: updated.owner_user_id ?? prev.owner_user_id,
+                  company_display:
+                    updated.company_display ?? prev.company_display,
+                }
+              : updated,
+          );
           setLeads((prev) =>
-            prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)),
+            prev.map((l) =>
+              l.id === updated.id
+                ? {
+                    ...l,
+                    ...updated,
+                    owner_name: updated.owner_name ?? l.owner_name,
+                    owner_user_id: updated.owner_user_id ?? l.owner_user_id,
+                    company_display:
+                      updated.company_display ?? l.company_display,
+                  }
+                : l,
+            ),
           );
         }}
         onLeadDeleted={(id) => {
@@ -156,10 +187,8 @@ function LeadsInner() {
 
 export default function LeadsPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading leads…</p>}>
-        <LeadsInner />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<PageListSkeleton />}>
+      <LeadsInner />
+    </Suspense>
   );
 }

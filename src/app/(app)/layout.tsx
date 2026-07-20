@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { AppShell } from "@/components/AppShell";
 import { getSessionUser } from "@/lib/auth";
 
 /**
- * Server-side gate: protected UI is never rendered without a valid session.
- * Middleware also blocks missing cookies; this validates the session token.
+ * Server-side gate + persistent shell so nav/session do not remount on every route.
  */
 export default async function ProtectedAppLayout({
   children,
@@ -15,5 +15,5 @@ export default async function ProtectedAppLayout({
   if (!user) {
     redirect("/login");
   }
-  return <>{children}</>;
+  return <AppShell>{children}</AppShell>;
 }

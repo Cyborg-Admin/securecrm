@@ -14,8 +14,7 @@ export type EnrichFieldKey =
   | "companyName"
   | "industry"
   | "website"
-  | "location"
-  | "headline";
+  | "location";
 
 export type ScrapedPerson = {
   linkedinUrl: string;
@@ -25,6 +24,7 @@ export type ScrapedPerson = {
   industry?: string | null;
   website?: string | null;
   location?: string | null;
+  /** Ignored — taglines are not stored. */
   headline?: string | null;
   experiences?: ExperienceInput[];
   metadata?: Record<string, unknown>;
@@ -61,7 +61,6 @@ const FIELD_MAP: Array<{
   { key: "industry", crm: "industry", scraped: "industry" },
   { key: "website", crm: "website", scraped: "website" },
   { key: "location", crm: "location", scraped: "location" },
-  { key: "headline", crm: "headline", scraped: "headline" },
 ];
 
 function norm(value: unknown): string | null {
@@ -111,7 +110,6 @@ export class LeadEnrichmentEngine {
       row.industry = null;
       row.website = null;
       row.location = null;
-      row.headline = null;
       const companyId = row.company_id as string | null;
       if (companyId) {
         const company = await db
@@ -162,16 +160,6 @@ export class LeadEnrichmentEngine {
     const diffs: FieldDiff[] = [];
 
     for (const map of FIELD_MAP) {
-      // Contacts don't have company_name/headline columns natively — use hydrated values.
-      if (
-        entity &&
-        map.crm === "headline" &&
-        !("headline" in entity) &&
-        entity.email !== undefined
-      ) {
-        // contact row: skip headline unless present
-      }
-
       const crmValue = entity ? norm(entity[map.crm]) : null;
       const scrapedValue = norm(scraped[map.scraped]);
 
@@ -332,7 +320,6 @@ export class LeadEnrichmentEngine {
            industry = COALESCE(?, industry),
            website = COALESCE(?, website),
            location = COALESCE(?, location),
-           headline = COALESCE(?, headline),
            source_url = COALESCE(?, source_url),
            metadata_json = ?,
            updated_at = datetime('now')
@@ -348,7 +335,6 @@ export class LeadEnrichmentEngine {
         patch.industry ?? null,
         patch.website ?? null,
         patch.location ?? null,
-        patch.headline ?? null,
         options.sourceUrl ?? null,
         JSON.stringify(nextMeta),
         leadId,

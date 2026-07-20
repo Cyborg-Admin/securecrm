@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/client-api";
 
 type InstallConfig = {
@@ -143,8 +142,7 @@ export default function ExtensionInstallPage() {
   const storeReady = Boolean(config?.canOneClickInstall && config.storeUrl);
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-3xl space-y-5">
+    <div className="mx-auto max-w-3xl space-y-5">
         <section className="neo-raised overflow-hidden p-0">
           <div className="border-b border-[var(--line)] bg-[linear-gradient(135deg,#d7efe6_0%,#ffffff_55%)] px-6 py-7">
             <p className="page-kicker">Browser extension</p>
@@ -344,7 +342,6 @@ export default function ExtensionInstallPage() {
           </ol>
         </section>
       </div>
-    </AppShell>
   );
 }
 

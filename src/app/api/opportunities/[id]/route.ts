@@ -9,23 +9,34 @@ import { assertFeatureEnabled, getOrganization } from "@/lib/org";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, ctx: Ctx) {
-  const user = await requireUser(req, "opportunities:read");
-  if (isResponse(user)) return user;
-  const { id } = await ctx.params;
+async function loadOpportunityWithRelations(id: string, organizationId: string) {
   const db = await getDbAsync();
-  const opportunity = await db
+  return db
     .prepare(
       `SELECT o.*, c.name as company_name, ct.full_name as contact_name,
               s.name as stage_name, u.full_name as owner_name
        FROM opportunities o
-       LEFT JOIN companies c ON c.id = o.company_id
-       LEFT JOIN contacts ct ON ct.id = o.contact_id
-       LEFT JOIN pipeline_stages s ON s.id = o.stage_id
-       LEFT JOIN users u ON u.id = o.owner_user_id
+       LEFT JOIN companies c
+         ON c.id = o.company_id AND c.organization_id = o.organization_id
+       LEFT JOIN contacts ct
+         ON ct.id = o.contact_id AND ct.organization_id = o.organization_id
+       LEFT JOIN pipeline_stages s
+         ON s.id = o.stage_id AND s.organization_id = o.organization_id
+       LEFT JOIN users u
+         ON u.id = o.owner_user_id AND u.organization_id = o.organization_id
        WHERE o.id = ? AND o.organization_id = ?`,
     )
-    .get(id, user.organization_id);
+    .get(id, organizationId);
+}
+
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const user = await requireUser(req, "opportunities:read");
+  if (isResponse(user)) return user;
+  const { id } = await ctx.params;
+  const opportunity = await loadOpportunityWithRelations(
+    id,
+    user.organization_id,
+  );
   if (!opportunity) return error("Not found", 404);
   return json({ opportunity });
 }
@@ -164,9 +175,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     after: { ...d, approvalStatus },
   });
 
-  const opportunity = await db
-    .prepare(`SELECT * FROM opportunities WHERE id = ?`)
-    .get(id);
+  const opportunity = await loadOpportunityWithRelations(
+    id,
+    user.organization_id,
+  );
   return json({ opportunity });
 }
 

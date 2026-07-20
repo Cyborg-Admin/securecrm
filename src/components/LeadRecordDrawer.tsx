@@ -28,6 +28,8 @@ export type Lead = {
   source: string;
   linkedin_uid: string | null;
   owner_name?: string;
+  owner_user_id?: string | null;
+  company_display?: string | null;
   company_id?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -38,9 +40,12 @@ type Experience = {
   id: string;
   title: string | null;
   company_name: string | null;
+  company_logo_url?: string | null;
   location: string | null;
   started_on: string | null;
   ended_on: string | null;
+  started_on_sort?: string | null;
+  ended_on_sort?: string | null;
   is_current: boolean | number;
   raw_text: string | null;
 };
@@ -122,7 +127,6 @@ const FIELD_GROUPS: Array<{
       ["full_name", "Full name"],
       ["email", "Email"],
       ["job_title", "Job title"],
-      ["headline", "Headline"],
     ],
   },
   {
@@ -225,7 +229,6 @@ export function LeadRecordDrawer({
       industry: lead.industry,
       website: lead.website,
       location: lead.location,
-      headline: lead.headline ?? "",
     });
     setLoadingSide(true);
     void Promise.all([
@@ -272,7 +275,6 @@ export function LeadRecordDrawer({
           industry: next.industry,
           website: next.website,
           location: next.location,
-          headline: next.headline,
         }),
       });
       onLeadUpdated(res.lead);
@@ -363,6 +365,14 @@ export function LeadRecordDrawer({
   const meta = lead ? leadMeta(lead) : {};
   const photoUrl = typeof meta.photoUrl === "string" ? meta.photoUrl : "";
   const bio = typeof meta.bio === "string" ? meta.bio.trim() : "";
+  const connectionRaw =
+    typeof meta.connectionCountRaw === "string"
+      ? meta.connectionCountRaw
+      : typeof meta.connectionCount === "number"
+        ? String(meta.connectionCount)
+        : typeof meta.connectionCount === "string"
+          ? meta.connectionCount
+          : "";
 
   return (
     <>
@@ -425,6 +435,13 @@ export function LeadRecordDrawer({
                 <span className="record-chip muted">
                   {lead.owner_name || "Unassigned"}
                 </span>
+                {connectionRaw ? (
+                  <span className="record-chip muted" title="LinkedIn connections">
+                    {/connection/i.test(connectionRaw)
+                      ? connectionRaw
+                      : `${connectionRaw} connections`}
+                  </span>
+                ) : null}
                 {(draft.email || lead.email) ? (
                   <a
                     className="record-chip link"
@@ -495,7 +512,7 @@ export function LeadRecordDrawer({
                         {group.fields.map(([key, label]) => (
                           <label
                             key={key}
-                            className={`block text-sm ${key === "headline" ? "sm:col-span-2" : ""}`}
+                            className="block text-sm"
                           >
                             <span className="text-[var(--neo-muted)]">{label}</span>
                             <input
@@ -659,42 +676,77 @@ export function LeadRecordDrawer({
 
               {tab === "roles" && (
                 <div className="space-y-3 text-sm">
-                  <h3 className="record-section-title">Roles / history</h3>
+                  <h3 className="record-section-title">
+                    Roles / employment history
+                  </h3>
+                  <p className="text-xs text-[var(--neo-muted)]">
+                    Date ranges from LinkedIn Experience (start – end). Capture or
+                    Enrich a profile to refresh.
+                  </p>
                   {related?.experiences?.length ? (
                     <ul className="space-y-3">
-                      {related.experiences.map((exp) => (
-                        <li key={exp.id} className="record-timeline-item">
-                          <p className="font-medium">
-                            {exp.title || "Role"}
-                            {exp.is_current ? (
-                              <span className="ml-2 text-xs text-[var(--accent-deep)]">
-                                Current
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="text-[var(--neo-muted)]">
-                            {[exp.company_name, exp.location]
-                              .filter(Boolean)
-                              .join(" · ") || "—"}
-                          </p>
-                          <p className="text-xs text-[var(--neo-muted)]">
-                            {[
-                              exp.started_on,
-                              exp.ended_on ||
-                                (exp.is_current ? "Present" : null),
-                            ]
-                              .filter(Boolean)
-                              .join(" – ") ||
-                              exp.raw_text?.slice(0, 120) ||
-                              ""}
-                          </p>
-                        </li>
-                      ))}
+                      {related.experiences.map((exp) => {
+                        const range =
+                          [
+                            exp.started_on,
+                            exp.ended_on ||
+                              (exp.is_current ? "Present" : null),
+                          ]
+                            .filter(Boolean)
+                            .join(" – ") ||
+                          exp.raw_text?.slice(0, 120) ||
+                          "";
+                        return (
+                          <li key={exp.id} className="record-timeline-item">
+                            <div className="flex gap-3">
+                              {exp.company_logo_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  className="record-role-logo"
+                                  src={exp.company_logo_url}
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div
+                                  className="record-role-logo record-role-logo-fallback"
+                                  aria-hidden
+                                >
+                                  {(exp.company_name || exp.title || "?")
+                                    .slice(0, 1)
+                                    .toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium">
+                                  {exp.title || "Role"}
+                                  {exp.is_current ? (
+                                    <span className="ml-2 text-xs text-[var(--accent-deep)]">
+                                      Current
+                                    </span>
+                                  ) : null}
+                                </p>
+                                <p className="text-[var(--neo-muted)]">
+                                  {[exp.company_name, exp.location]
+                                    .filter(Boolean)
+                                    .join(" · ") || "—"}
+                                </p>
+                                {range ? (
+                                  <p className="mt-0.5 text-xs font-medium text-[var(--neo-ink)]">
+                                    {range}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
                     <p className="text-[var(--neo-muted)]">
-                      No appointment history yet — deep-scrape the LinkedIn
-                      profile.
+                      No employment history yet — open the LinkedIn profile and
+                      Capture or Enrich (train the Experience section if roles
+                      are missing).
                     </p>
                   )}
                 </div>

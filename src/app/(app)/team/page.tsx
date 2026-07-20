@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
+import { RecordListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/client-api";
 
 type UserRow = {
@@ -15,6 +15,7 @@ type UserRow = {
 
 export default function TeamPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +28,9 @@ export default function TeamPage() {
   }
 
   useEffect(() => {
-    void load().catch((e) => setError(e.message));
+    void load()
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   async function onCreate(e: FormEvent) {
@@ -48,42 +51,81 @@ export default function TeamPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <h1 className="display text-3xl">Team & roles</h1>
       <p className="mt-1 text-[var(--neo-muted)]">
         Role-based privileges sit at the heart of every mutation.
       </p>
 
-      <form onSubmit={onCreate} className="neo-raised mt-5 grid gap-3 p-4 md:grid-cols-2">
-        <input className="neo-input" placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-        <input className="neo-input" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input className="neo-input" type="password" placeholder="Temp password (10+ chars)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} />
-        <select className="neo-input" value={roleName} onChange={(e) => setRoleName(e.target.value)}>
+      <form
+        onSubmit={onCreate}
+        className="neo-raised mt-5 grid gap-3 p-4 md:grid-cols-2"
+      >
+        <input
+          className="neo-input"
+          placeholder="Full name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          required
+        />
+        <input
+          className="neo-input"
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <input
+          className="neo-input"
+          type="password"
+          placeholder="Temp password (10+ chars)"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={10}
+        />
+        <select
+          className="neo-input"
+          value={roleName}
+          onChange={(e) => setRoleName(e.target.value)}
+        >
           <option>Admin</option>
           <option>Manager</option>
           <option>Rep</option>
           <option>Viewer</option>
         </select>
-        <button className="neo-btn neo-btn-primary md:col-span-2">Invite user</button>
+        <button className="neo-btn neo-btn-primary md:col-span-2">
+          Invite user
+        </button>
       </form>
-      {error && <p className="mt-2 text-sm text-[var(--neo-danger)]">{error}</p>}
+      {error ? (
+        <p className="mt-2 text-sm text-[var(--neo-danger)]">{error}</p>
+      ) : null}
 
-      <ul className="mt-5 space-y-3">
-        {users.map((u) => (
-          <li key={u.id} className="neo-raised flex flex-wrap items-center justify-between gap-3 p-4">
-            <div>
-              <p className="font-medium">{u.full_name}</p>
-              <p className="text-sm text-[var(--neo-muted)]">{u.email}</p>
-            </div>
-            <div className="text-right text-sm">
-              <p>{u.roles || "No role"}</p>
-              <p className="text-[var(--neo-muted)]">
-                {u.is_active ? "Active" : "Disabled"}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </AppShell>
+      {loading ? (
+        <RecordListSkeleton rows={4} />
+      ) : (
+        <ul className="mt-5 space-y-3">
+          {users.map((u) => (
+            <li
+              key={u.id}
+              className="neo-raised flex flex-wrap items-center justify-between gap-3 p-4"
+            >
+              <div>
+                <p className="font-medium">{u.full_name}</p>
+                <p className="text-sm text-[var(--neo-muted)]">{u.email}</p>
+              </div>
+              <div className="text-right text-sm">
+                <p>{u.roles || "No role"}</p>
+                <p className="text-[var(--neo-muted)]">
+                  {u.is_active ? "Active" : "Disabled"}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

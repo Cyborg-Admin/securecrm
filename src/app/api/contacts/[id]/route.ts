@@ -26,9 +26,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       `SELECT c.*, co.name as company_name, l.full_name as lead_name,
               l.id as related_lead_id, u.full_name as owner_name
        FROM contacts c
-       LEFT JOIN companies co ON co.id = c.company_id
-       LEFT JOIN leads l ON l.id = c.lead_id
-       LEFT JOIN users u ON u.id = c.owner_user_id
+       LEFT JOIN companies co
+         ON co.id = c.company_id AND co.organization_id = c.organization_id
+       LEFT JOIN leads l
+         ON l.id = c.lead_id AND l.organization_id = c.organization_id
+       LEFT JOIN users u
+         ON u.id = c.owner_user_id AND u.organization_id = c.organization_id
        WHERE c.id = ? AND c.organization_id = ?`,
     )
     .get(id, user.organization_id);
@@ -95,7 +98,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       user.organization_id,
     );
 
-  const contact = await db.prepare("SELECT * FROM contacts WHERE id = ?").get(id);
+  const contact = await db
+    .prepare(
+      `SELECT c.*, co.name as company_name, l.full_name as lead_name,
+              l.id as related_lead_id, u.full_name as owner_name
+       FROM contacts c
+       LEFT JOIN companies co
+         ON co.id = c.company_id AND co.organization_id = c.organization_id
+       LEFT JOIN leads l
+         ON l.id = c.lead_id AND l.organization_id = c.organization_id
+       LEFT JOIN users u
+         ON u.id = c.owner_user_id AND u.organization_id = c.organization_id
+       WHERE c.id = ? AND c.organization_id = ?`,
+    )
+    .get(id, user.organization_id);
   await writeAudit({
     organizationId: user.organization_id,
     actorUserId: user.id,

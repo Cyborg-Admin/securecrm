@@ -2,12 +2,12 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { CreateOpportunityModal } from "@/components/CreateOpportunityModal";
 import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { SaveBadge } from "@/components/SaveBadge";
 import { QuickCreateModal } from "@/components/QuickCreateModal";
 import { useDynamicSave } from "@/hooks/useDynamicSave";
+import { PageListSkeleton, RecordListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/client-api";
 
 type Contact = {
@@ -21,6 +21,7 @@ type Contact = {
   company_name?: string | null;
   lead_name?: string | null;
   owner_name?: string | null;
+  owner_user_id?: string | null;
   lead_id?: string | null;
 };
 
@@ -42,16 +43,21 @@ function ContactsInner() {
   const [showCreate, setShowCreate] = useState(false);
   const [oppOpen, setOppOpen] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   async function load(query = q) {
-    const data = await api<{ contacts: Contact[] }>(
-      `/api/contacts?q=${encodeURIComponent(query)}`,
-    );
-    setContacts(data.contacts);
-    const openId = search.get("open");
-    if (openId) {
-      const found = data.contacts.find((c) => c.id === openId);
-      if (found) void openContact(found);
+    try {
+      const data = await api<{ contacts: Contact[] }>(
+        `/api/contacts?q=${encodeURIComponent(query)}`,
+      );
+      setContacts(data.contacts);
+      const openId = search.get("open");
+      if (openId) {
+        const found = data.contacts.find((c) => c.id === openId);
+        if (found) void openContact(found);
+      }
+    } finally {
+      setInitialLoading(false);
     }
   }
 
@@ -94,9 +100,27 @@ function ContactsInner() {
           phone: next.phone,
         }),
       });
-      setSelected(res.contact);
+      setSelected((prev) =>
+        prev && prev.id === res.contact.id
+          ? {
+              ...prev,
+              ...res.contact,
+              owner_name: res.contact.owner_name ?? prev.owner_name,
+              owner_user_id: res.contact.owner_user_id ?? prev.owner_user_id,
+            }
+          : res.contact,
+      );
       setContacts((prev) =>
-        prev.map((c) => (c.id === res.contact.id ? { ...c, ...res.contact } : c)),
+        prev.map((c) =>
+          c.id === res.contact.id
+            ? {
+                ...c,
+                ...res.contact,
+                owner_name: res.contact.owner_name ?? c.owner_name,
+                owner_user_id: res.contact.owner_user_id ?? c.owner_user_id,
+              }
+            : c,
+        ),
       );
     },
     700,
@@ -128,26 +152,32 @@ function ContactsInner() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <ul className="mt-4 max-h-[70vh] space-y-2 overflow-auto">
-            {contacts.map((c) => (
-              <li key={c.id}>
-                <button
-                  className={`w-full rounded-2xl p-3 text-left ${
-                    selected?.id === c.id ? "neo-pressed" : "neo-inset"
-                  }`}
-                  onClick={() => void openContact(c)}
-                >
-                  <p className="font-medium">{c.full_name}</p>
-                  <p className="text-sm text-[var(--neo-muted)]">
-                    {[c.job_title, c.company_name, c.email].filter(Boolean).join(" · ") || "No extras"}
-                  </p>
-                </button>
-              </li>
-            ))}
-            {!contacts.length && (
-              <li className="text-sm text-[var(--neo-muted)]">No contacts yet.</li>
-            )}
-          </ul>
+          {initialLoading ? (
+            <RecordListSkeleton />
+          ) : (
+            <ul className="mt-4 max-h-[70vh] space-y-2 overflow-auto">
+              {contacts.map((c) => (
+                <li key={c.id}>
+                  <button
+                    className={`w-full rounded-2xl p-3 text-left ${
+                      selected?.id === c.id ? "neo-pressed" : "neo-inset"
+                    }`}
+                    onClick={() => void openContact(c)}
+                  >
+                    <p className="font-medium">{c.full_name}</p>
+                    <p className="text-sm text-[var(--neo-muted)]">
+                      {[c.job_title, c.company_name, c.email]
+                        .filter(Boolean)
+                        .join(" · ") || "No extras"}
+                    </p>
+                  </button>
+                </li>
+              ))}
+              {!contacts.length ? (
+                <li className="text-sm text-[var(--neo-muted)]">No contacts yet.</li>
+              ) : null}
+            </ul>
+          )}
         </section>
 
         <aside
@@ -284,10 +314,8 @@ function ContactsInner() {
 
 export default function ContactsPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading contacts…</p>}>
-        <ContactsInner />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<PageListSkeleton />}>
+      <ContactsInner />
+    </Suspense>
   );
 }

@@ -17,8 +17,10 @@ export async function GET(req: NextRequest) {
 
   let sql = `SELECT l.*, u.full_name as owner_name, c.name as company_display
              FROM leads l
-             LEFT JOIN users u ON u.id = l.owner_user_id
-             LEFT JOIN companies c ON c.id = l.company_id
+             LEFT JOIN users u
+               ON u.id = l.owner_user_id AND u.organization_id = l.organization_id
+             LEFT JOIN companies c
+               ON c.id = l.company_id AND c.organization_id = l.organization_id
              WHERE l.organization_id = ?`;
   const params: unknown[] = [user.organization_id];
 

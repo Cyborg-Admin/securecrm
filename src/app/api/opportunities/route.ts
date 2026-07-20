@@ -23,10 +23,14 @@ export async function GET(req: NextRequest) {
               s.name as stage_name,
               u.full_name as owner_name
        FROM opportunities o
-       LEFT JOIN companies c ON c.id = o.company_id
-       LEFT JOIN contacts ct ON ct.id = o.contact_id
-       LEFT JOIN pipeline_stages s ON s.id = o.stage_id
-       LEFT JOIN users u ON u.id = o.owner_user_id
+       LEFT JOIN companies c
+         ON c.id = o.company_id AND c.organization_id = o.organization_id
+       LEFT JOIN contacts ct
+         ON ct.id = o.contact_id AND ct.organization_id = o.organization_id
+       LEFT JOIN pipeline_stages s
+         ON s.id = o.stage_id AND s.organization_id = o.organization_id
+       LEFT JOIN users u
+         ON u.id = o.owner_user_id AND u.organization_id = o.organization_id
        WHERE o.organization_id = ?`;
   const params: unknown[] = [user.organization_id];
   if (q) {

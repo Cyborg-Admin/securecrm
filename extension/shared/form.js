@@ -8,7 +8,6 @@
     { key: "industry", label: "Industry", required: false },
     { key: "website", label: "Website", required: false },
     { key: "location", label: "Location", required: false },
-    { key: "headline", label: "Headline", required: false },
   ];
 
   function missingKeys(lead) {

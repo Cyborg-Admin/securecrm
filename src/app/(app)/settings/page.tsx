@@ -3,7 +3,7 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
+import { PageListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/client-api";
 import { FEATURE_KEYS } from "@/lib/features";
 
@@ -789,10 +789,8 @@ function SettingsInner() {
 
 export default function SettingsPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading settings…</p>}>
-        <SettingsInner />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<PageListSkeleton />}>
+      <SettingsInner />
+    </Suspense>
   );
 }

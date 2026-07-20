@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { api } from "@/lib/client-api";
 
@@ -118,7 +117,7 @@ export default function EventsPage() {
         : contacts.map((x) => ({ id: x.id, label: x.full_name }));
 
   return (
-    <AppShell>
+    <>
       <h1 className="display text-3xl">Events</h1>
       <p className="mt-1 text-[var(--neo-muted)]">
         Track registrations for sales pipeline and delegate attendance. Link
@@ -271,6 +270,6 @@ export default function EventsPage() {
           )}
         </aside>
       </div>
-    </AppShell>
+    </>
   );
 }

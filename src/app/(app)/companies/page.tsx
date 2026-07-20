@@ -2,11 +2,11 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { CreateOpportunityModal } from "@/components/CreateOpportunityModal";
 import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { SaveBadge } from "@/components/SaveBadge";
 import { useDynamicSave } from "@/hooks/useDynamicSave";
+import { PageListSkeleton, RecordListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/client-api";
 
 type Company = {
@@ -53,16 +53,21 @@ function CompaniesInner() {
   const [createIndustry, setCreateIndustry] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [oppOpen, setOppOpen] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   async function load(query = q) {
-    const data = await api<{ companies: Company[] }>(
-      `/api/companies?q=${encodeURIComponent(query)}`,
-    );
-    setCompanies(data.companies);
-    const openId = search.get("open");
-    if (openId) {
-      const found = data.companies.find((c) => c.id === openId);
-      if (found) void openCompany(found);
+    try {
+      const data = await api<{ companies: Company[] }>(
+        `/api/companies?q=${encodeURIComponent(query)}`,
+      );
+      setCompanies(data.companies);
+      const openId = search.get("open");
+      if (openId) {
+        const found = data.companies.find((c) => c.id === openId);
+        if (found) void openCompany(found);
+      }
+    } finally {
+      setInitialLoading(false);
     }
   }
 
@@ -191,29 +196,35 @@ function CompaniesInner() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <ul className="mt-4 max-h-[65vh] space-y-2 overflow-auto">
-          {companies.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                className={`w-full rounded-2xl p-3 text-left ${
-                  selected?.id === c.id && open ? "neo-pressed" : "neo-inset"
-                }`}
-                onClick={() => void openCompany(c)}
-              >
-                <p className="font-medium">{c.name}</p>
-                <p className="text-sm text-[var(--neo-muted)]">
-                  {[c.domain, c.industry, c.location].filter(Boolean).join(" · ") ||
-                    "No extras"}
-                </p>
-                <p className="mt-1 text-xs text-[var(--neo-muted)]">
-                  {Number(c.lead_count || 0)} leads · {Number(c.contact_count || 0)}{" "}
-                  contacts · {Number(c.opportunity_count || 0)} opportunities
-                </p>
-              </button>
-            </li>
-          ))}
-        </ul>
+        {initialLoading ? (
+          <RecordListSkeleton />
+        ) : (
+          <ul className="mt-4 max-h-[65vh] space-y-2 overflow-auto">
+            {companies.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className={`w-full rounded-2xl p-3 text-left ${
+                    selected?.id === c.id && open ? "neo-pressed" : "neo-inset"
+                  }`}
+                  onClick={() => void openCompany(c)}
+                >
+                  <p className="font-medium">{c.name}</p>
+                  <p className="text-sm text-[var(--neo-muted)]">
+                    {[c.domain, c.industry, c.location]
+                      .filter(Boolean)
+                      .join(" · ") || "No extras"}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--neo-muted)]">
+                    {Number(c.lead_count || 0)} leads ·{" "}
+                    {Number(c.contact_count || 0)} contacts ·{" "}
+                    {Number(c.opportunity_count || 0)} opportunities
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <div
@@ -453,10 +464,8 @@ function CompaniesInner() {
 
 export default function CompaniesPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading companies…</p>}>
-        <CompaniesInner />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<PageListSkeleton />}>
+      <CompaniesInner />
+    </Suspense>
   );
 }

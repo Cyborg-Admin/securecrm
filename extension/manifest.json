@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "KINETIC Lead Capture",
   "description": "Capture leads from LinkedIn, Sales Navigator, Cognism, and match Gmail to KINETIC.",
-  "version": "1.5.7",
+  "version": "1.6.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA12QOt0DhHTG9d6FzA65Vus+k053m6pCPVVJ8oesQ70r6ifHHC1571vUTgo0sTRpP5TsJc72W7G8Yauy70VK239TMSGZWM31PaqxdpmA2o0B5M9YDi1hG5iXyou6Y6NGdT3xYdWi1g1FtNn4KmCNpKFTAAuy8sEn5AF653CmQgMDhkmxpNIOFOEY6nXG5F4nweD3J+Wqe1x9P8S9k8a0OTbv1LcikfTKIkYB+9lV6Jm10vvx8gzNjDhLBPii0WUhToIiuYgSPD0dWfk3OSEAaSLWOPALT/4sLchItmjUBnkTeZIoLoRbqDqV0Z66dYTGe6VEjex0fm1u5tuq3YSIOFQIDAQAB",
   "externally_connectable": {
     "matches": [
@@ -119,13 +119,9 @@
       "matches": ["https://mail.google.com/*"],
       "js": [
         "shared/crm-api.js",
-        "shared/history.js",
-        "shared/panel.js",
-        "shared/form.js",
-        "shared/fab.js",
+        "shared/signature.js",
         "content/gmail.js"
       ],
-      "css": ["styles/panel.css"],
       "run_at": "document_idle"
     }
   ],

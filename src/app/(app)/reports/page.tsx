@@ -15,7 +15,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AppShell } from "@/components/AppShell";
 import { ClientOnly } from "@/components/ClientOnly";
 import { api } from "@/lib/client-api";
 
@@ -55,8 +54,8 @@ export default function ReportsPage() {
   }, []);
 
   return (
-    <AppShell>
-      <div className="fade-up">
+    <>
+      <div>
         <p className="page-kicker">Analytics</p>
         <h1 className="display mt-1 text-3xl md:text-4xl">Reports</h1>
         <p className="mt-2 max-w-2xl text-[var(--neo-muted)]">
@@ -64,7 +63,7 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
+      {error ? <p className="mt-4 text-sm text-[var(--danger)]">{error}</p> : null}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -191,6 +190,6 @@ export default function ReportsPage() {
           </ClientOnly>
         </div>
       </section>
-    </AppShell>
+    </>
   );
 }

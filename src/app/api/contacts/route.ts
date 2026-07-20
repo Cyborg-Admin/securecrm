@@ -25,9 +25,12 @@ export async function GET(req: NextRequest) {
       co.name as company_name,
       u.full_name as owner_name
     FROM contacts c
-    LEFT JOIN leads l ON l.id = c.lead_id
-    LEFT JOIN companies co ON co.id = c.company_id
-    LEFT JOIN users u ON u.id = c.owner_user_id
+    LEFT JOIN leads l
+      ON l.id = c.lead_id AND l.organization_id = c.organization_id
+    LEFT JOIN companies co
+      ON co.id = c.company_id AND co.organization_id = c.organization_id
+    LEFT JOIN users u
+      ON u.id = c.owner_user_id AND u.organization_id = c.organization_id
     WHERE c.organization_id = ?`;
   const params: unknown[] = [user.organization_id];
   if (q) {

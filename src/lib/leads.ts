@@ -22,6 +22,7 @@ export type LeadCaptureInput = {
   industry?: string | null;
   website?: string | null;
   location?: string | null;
+  /** @deprecated Not stored — taglines/headlines are ignored. */
   headline?: string | null;
   source: "linkedin" | "salesnav" | "cognism" | "gmail" | "manual";
   sourceUrl?: string | null;
@@ -153,7 +154,6 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
          industry = COALESCE(?, industry),
          website = COALESCE(?, website),
          location = COALESCE(?, location),
-         headline = COALESCE(?, headline),
          source = ?,
          source_url = COALESCE(?, source_url),
          metadata_json = ?,
@@ -172,7 +172,6 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
         input.industry ?? null,
         input.website ?? null,
         input.location ?? null,
-        input.headline ?? null,
         input.source,
         input.sourceUrl ?? null,
         JSON.stringify(nextMeta),
@@ -210,9 +209,9 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
     .prepare(
       `INSERT INTO leads
      (id, organization_id, linkedin_uid, email, full_name, first_name, last_name,
-      job_title, company_id, company_name, industry, website, location, headline,
+      job_title, company_id, company_name, industry, website, location,
       source, source_url, status, owner_user_id, metadata_json, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
     )
     .run(
       id,
@@ -228,7 +227,6 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
       input.industry ?? null,
       input.website ?? null,
       input.location ?? null,
-      input.headline ?? null,
       input.source,
       input.sourceUrl ?? null,
       owner,

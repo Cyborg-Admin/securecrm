@@ -47,8 +47,32 @@
     </nav>
 
     <section id="tab-crm" class="panel active">
+      <div class="row context-head">
+        <h2 class="section-title" style="margin:0">Page context</h2>
+        <button type="button" id="refreshContext" class="ghost">Refresh</button>
+      </div>
+      <p id="contextHint" class="muted tiny">Open a Gmail thread to recognise people from the message and signature.</p>
+
+      <div id="personCard" class="person-card" hidden>
+        <strong id="personName"></strong>
+        <span id="personTitle"></span>
+        <span id="personDetails"></span>
+        <span id="personSubject" class="tiny muted"></span>
+      </div>
+
+      <h2 class="section-title">Recognised records</h2>
+      <ul id="matchList" class="list match-list"></ul>
+      <p id="matchEmpty" class="muted">No CRM matches yet.</p>
+
+      <h2 class="section-title">Next best action</h2>
+      <p id="nbaCopy" class="nba-copy">Waiting for page context…</p>
+      <div id="nbaActions" class="nba-actions"></div>
+      <button type="button" id="captureLeadBtn" class="primary" hidden>Capture lead</button>
+      <p id="contextStatus" class="muted"></p>
+
+      <h2 class="section-title">Search leads</h2>
       <label class="field">
-        Search leads
+        Search
         <input id="leadSearch" type="search" placeholder="Name, company, title…" />
       </label>
       <ul id="leadList" class="list"></ul>
@@ -75,7 +99,11 @@
         <input id="trainMode" type="checkbox" />
         Enable train mode on LinkedIn (click elements to map fields)
       </label>
-      <p class="muted tiny">Owner-only workflow. Saves scrape recipes to the CRM.</p>
+      <p class="muted tiny">
+        Click the live element on LinkedIn, then map the field (name, title, company,
+        location, connection count, or Experience section). Prefer Train mode over pasting
+        HTML from Inspect — LinkedIn classes change often. Owner-only; recipes save to the CRM.
+      </p>
     </section>
 
     <section id="tab-history" class="panel">
@@ -117,11 +145,11 @@
       </label>
       <label class="check">
         <input id="autoScanGmail" type="checkbox" />
-        Auto-scan open Gmail threads
+        Auto-scan open Gmail threads (side panel)
       </label>
       <label class="check">
         <input id="showFab" type="checkbox" />
-        Show floating action button (FAB)
+        Show LinkedIn / Cognism floating actions
       </label>
       <label class="field">
         Bulk capture page limit

@@ -13,7 +13,7 @@
     { id: "jobTitle", label: "Job title" },
     { id: "companyName", label: "Company" },
     { id: "location", label: "Location" },
-    { id: "headline", label: "Headline" },
+    { id: "connectionCount", label: "Connection count" },
     { id: "experienceRoot", label: "Experience section" },
   ];
 

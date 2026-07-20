@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { api } from "@/lib/client-api";
 
@@ -112,7 +111,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <h1 className="display text-3xl">Products</h1>
       <p className="mt-1 text-[var(--neo-muted)]">
         Catalogue of products and services you sell. Attach them to opportunities
@@ -295,6 +294,6 @@ export default function ProductsPage() {
           )}
         </aside>
       </div>
-    </AppShell>
+    </>
   );
 }

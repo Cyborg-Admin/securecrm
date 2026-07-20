@@ -317,7 +317,44 @@ export async function runMigrations(): Promise<void> {
 
   await migrateLeadsIdentity();
   await ensureEmailTables();
+  await migrateLeadExperiencesColumns();
   await migrateLeadPipelineKey();
+}
+
+/** Role history: logos + YYYY-MM sort keys for date ranges. */
+async function migrateLeadExperiencesColumns(): Promise<void> {
+  const db = await getDbAsync();
+  if (!(await tableExists("lead_experiences"))) return;
+
+  const cols: Array<{ name: string; sqlite: string; postgres: string }> = [
+    {
+      name: "company_logo_url",
+      sqlite: "ALTER TABLE lead_experiences ADD COLUMN company_logo_url TEXT",
+      postgres:
+        "ALTER TABLE lead_experiences ADD COLUMN IF NOT EXISTS company_logo_url TEXT",
+    },
+    {
+      name: "started_on_sort",
+      sqlite: "ALTER TABLE lead_experiences ADD COLUMN started_on_sort TEXT",
+      postgres:
+        "ALTER TABLE lead_experiences ADD COLUMN IF NOT EXISTS started_on_sort TEXT",
+    },
+    {
+      name: "ended_on_sort",
+      sqlite: "ALTER TABLE lead_experiences ADD COLUMN ended_on_sort TEXT",
+      postgres:
+        "ALTER TABLE lead_experiences ADD COLUMN IF NOT EXISTS ended_on_sort TEXT",
+    },
+  ];
+
+  for (const col of cols) {
+    if (await columnExists("lead_experiences", col.name)) continue;
+    if (db.driver === "sqlite") {
+      await db.exec(col.sqlite);
+    } else {
+      await db.exec(col.postgres);
+    }
+  }
 }
 
 /** Allow pipeline_key = 'lead' on existing deployments. */

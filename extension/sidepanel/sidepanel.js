@@ -7,7 +7,10 @@ document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.add("active");
     $(`tab-${tab.dataset.tab}`).classList.add("active");
     if (tab.dataset.tab === "history") renderHistory();
-    if (tab.dataset.tab === "crm") searchLeads();
+    if (tab.dataset.tab === "crm") {
+      refreshPageContext();
+      searchLeads();
+    }
     if (tab.dataset.tab === "scrape") refreshDeepStatus();
   });
 });
@@ -121,7 +124,7 @@ $("saveSettings").addEventListener("click", async () => {
       Math.max(1, Number($("deepScrapeMaxProfiles").value) || 25),
     ),
   });
-  $("settingsStatus").textContent = "Saved. Reload LinkedIn / Gmail tabs for FAB & badges.";
+  $("settingsStatus").textContent = "Saved. Reload LinkedIn / Cognism tabs for FAB & badges.";
   chrome.runtime.sendMessage({ type: "CHECK_UPDATE" });
 });
 
@@ -231,6 +234,323 @@ $("unlinkAutoUpdate").addEventListener("click", async () => {
   await renderAutoUpdateStatus();
 });
 
+/** @type {{ person: object|null, matchResult: object|null, site: string|null, fingerprint: string }} */
+let pageState = { person: null, matchResult: null, site: null, fingerprint: "" };
+let contextRefreshTimer = null;
+let lastMatchedFingerprint = "";
+
+function clearNbaActions() {
+  const box = $("nbaActions");
+  if (box) box.innerHTML = "";
+}
+
+function addNbaButton(label, onClick, primary = false) {
+  const box = $("nbaActions");
+  if (!box) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = primary ? "primary nba-btn" : "ghost nba-btn";
+  btn.textContent = label;
+  btn.addEventListener("click", onClick);
+  box.appendChild(btn);
+}
+
+async function openCrmRecord(entityType, id) {
+  const cfg = await SecureCRM.getConfig();
+  const path =
+    entityType === "contact" ? `/contacts?open=${id}` : `/leads?open=${id}`;
+  chrome.tabs.create({ url: `${cfg.apiBase}${path}` });
+}
+
+function personToLeadPayload(person) {
+  const email = person.email || null;
+  return {
+    fullName: person.fullName || email || "Unknown",
+    email,
+    jobTitle: person.jobTitle || null,
+    companyName: person.companyName || null,
+    website: person.website || null,
+    linkedinUrl: person.linkedinUrl || null,
+    metadata: {
+      gmail_email: email,
+      phone: person.phone || null,
+      subject: person.subject || null,
+      signature_scanned: true,
+      to_emails: person.toEmails || [],
+      external_thread_id: person.externalThreadId || null,
+      external_message_id: person.externalMessageId || null,
+    },
+  };
+}
+
+function renderPersonCard(person) {
+  const card = $("personCard");
+  if (!person) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  $("personName").textContent = person.fullName || person.email || "Unknown sender";
+  $("personTitle").textContent = [person.jobTitle, person.companyName]
+    .filter(Boolean)
+    .join(" · ");
+  const bits = [person.email, person.phone, person.website, person.linkedinUrl].filter(
+    Boolean,
+  );
+  $("personDetails").textContent = bits.join(" · ");
+  $("personSubject").textContent = person.subject
+    ? `Subject: ${person.subject}`
+    : "";
+}
+
+function renderMatches(matchResult) {
+  const list = $("matchList");
+  const empty = $("matchEmpty");
+  list.innerHTML = "";
+  const matches = matchResult?.matches || [];
+  empty.hidden = matches.length > 0;
+  if (!matches.length) {
+    empty.textContent = pageState.person
+      ? "No close CRM match — capture as a new lead."
+      : "Open a Gmail thread to match contacts and leads.";
+    return;
+  }
+  for (const m of matches.slice(0, 5)) {
+    const li = document.createElement("li");
+    li.className = "match-item";
+    const type = m.entity_type === "contact" ? "Contact" : "Lead";
+    li.innerHTML = `<strong></strong><span></span><span></span>`;
+    li.querySelector("strong").textContent = `${m.full_name || "Untitled"} · ${type}`;
+    li.querySelectorAll("span")[0].textContent =
+      [m.job_title, m.company_name, m.email].filter(Boolean).join(" · ") || "—";
+    li.querySelectorAll("span")[1].textContent = `Match ${m.score}% · ${(m.reasons || []).join(", ")}`;
+    li.addEventListener("click", () => openCrmRecord(m.entity_type, m.id));
+    list.appendChild(li);
+  }
+}
+
+function renderNba() {
+  clearNbaActions();
+  const copy = $("nbaCopy");
+  const captureBtn = $("captureLeadBtn");
+  captureBtn.hidden = true;
+
+  SecureCRM.isSignedIn().then((signedIn) => {
+    if (!signedIn) {
+      copy.textContent = "Sign in under Settings to match and capture from Gmail.";
+      addNbaButton("Go to Settings", () => {
+        document.querySelector('.tab[data-tab="settings"]')?.click();
+      }, true);
+      return;
+    }
+
+    const person = pageState.person;
+    if (!person) {
+      copy.textContent =
+        "Open a Gmail conversation. Kinetic scans the signature for name, title, company, email, phone, and LinkedIn.";
+      return;
+    }
+
+    const hasIdentity = Boolean(person.email || person.linkedinUrl);
+    const best = pageState.matchResult?.best;
+    const close = Boolean(pageState.matchResult?.closeMatch && best);
+
+    if (!hasIdentity) {
+      copy.textContent =
+        "Signature scan found a person but no email or LinkedIn URL — add those before capturing.";
+      return;
+    }
+
+    if (close) {
+      const type = best.entity_type === "contact" ? "contact" : "lead";
+      const gaps = [];
+      if (person.phone && type === "contact") gaps.push("phone on file");
+      if (person.jobTitle && !best.job_title) gaps.push("job title");
+      if (person.companyName && !best.company_name) gaps.push("company");
+      copy.textContent = gaps.length
+        ? `Recognised ${type}: ${best.full_name}. Next: open the record and fill ${gaps.join(", ")} from the signature.`
+        : `Recognised ${type}: ${best.full_name}. Next: open the record or continue the conversation in CRM.`;
+      addNbaButton(
+        `Open ${type}`,
+        () => openCrmRecord(best.entity_type, best.id),
+        true,
+      );
+      if (pageState.matchResult?.suggestAddLead === false) {
+        captureBtn.hidden = true;
+      }
+      return;
+    }
+
+    copy.textContent = `No strong match for ${person.fullName || person.email}. Next: capture as a lead from the signature details.`;
+    captureBtn.hidden = false;
+    addNbaButton("Capture lead", () => captureCurrentLead(), true);
+  });
+}
+
+async function captureCurrentLead() {
+  const status = $("contextStatus");
+  const person = pageState.person;
+  if (!person) {
+    status.textContent = "No person detected on this page.";
+    return;
+  }
+  if (!person.email && !person.linkedinUrl) {
+    status.textContent = "Need an email or LinkedIn URL to capture.";
+    return;
+  }
+  const btn = $("captureLeadBtn");
+  btn.disabled = true;
+  status.textContent = "Capturing…";
+  try {
+    const res = await SecureCRM.captureLeads({
+      source: "gmail",
+      sourceUrl: person.sourceUrl || null,
+      startBatch: true,
+      finishBatch: true,
+      leads: [personToLeadPayload(person)],
+    });
+    const created = res.created || 0;
+    const updated = res.updated || 0;
+    status.textContent =
+      created > 0
+        ? `Lead created.`
+        : updated > 0
+          ? `Lead updated.`
+          : `Captured ${res.captured || 0}.`;
+    lastMatchedFingerprint = "";
+    await matchCurrentPerson(person, pageState.fingerprint || "");
+  } catch (e) {
+    status.textContent = e.message || "Capture failed";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function matchCurrentPerson(person, fingerprint = "") {
+  if (!person?.email && !person?.fullName && !person?.linkedinUrl) {
+    pageState.matchResult = null;
+    lastMatchedFingerprint = "";
+    renderMatches(null);
+    renderNba();
+    return;
+  }
+  if (fingerprint && fingerprint === lastMatchedFingerprint && pageState.matchResult) {
+    renderMatches(pageState.matchResult);
+    renderNba();
+    return;
+  }
+  try {
+    const matchResult = await SecureCRM.matchPerson({
+      fullName: person.fullName || null,
+      email: person.email || null,
+      linkedinUrl: person.linkedinUrl || null,
+      companyName: person.companyName || null,
+      emailContext: {
+        subject: person.subject || null,
+        fromEmail: person.email || null,
+        fromName: person.fullName || null,
+        toEmails: person.toEmails || [],
+        sourceUrl: person.sourceUrl || null,
+        snippet: person.snippet || null,
+        bodyText: person.bodyText || null,
+        externalThreadId: person.externalThreadId || null,
+        externalMessageId: person.externalMessageId || null,
+        sentAt: person.sentAt || null,
+        direction: "inbound",
+      },
+    });
+    pageState.matchResult = matchResult;
+    lastMatchedFingerprint = fingerprint || lastMatchedFingerprint;
+    renderMatches(matchResult);
+    renderNba();
+    if (matchResult.activityLogged) {
+      $("contextStatus").textContent = "Email activity logged on the matched record.";
+    }
+  } catch (e) {
+    pageState.matchResult = null;
+    lastMatchedFingerprint = "";
+    renderMatches(null);
+    renderNba();
+    $("contextStatus").textContent = e.message || "Match failed";
+  }
+}
+
+async function refreshPageContext() {
+  const hint = $("contextHint");
+  const status = $("contextStatus");
+  try {
+    let res = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT" });
+    let ctx = res?.context;
+    if (!ctx?.person) {
+      const parsed = await chrome.runtime.sendMessage({ type: "REQUEST_PAGE_PARSE" });
+      if (parsed?.person) {
+        ctx = {
+          site: "gmail",
+          person: parsed.person,
+          empty: false,
+        };
+      }
+    }
+
+    if (!ctx?.person || ctx.empty) {
+      pageState = {
+        person: null,
+        matchResult: null,
+        site: ctx?.site || null,
+        fingerprint: "",
+      };
+      lastMatchedFingerprint = "";
+      renderPersonCard(null);
+      renderMatches(null);
+      renderNba();
+      hint.textContent =
+        "Open a Gmail thread — Kinetic reads the From header and email signature.";
+      return;
+    }
+
+    const fp =
+      ctx.fingerprint ||
+      [ctx.person.email, ctx.person.fullName, ctx.person.externalMessageId]
+        .filter(Boolean)
+        .join("|");
+    pageState.person = ctx.person;
+    pageState.site = ctx.site || "gmail";
+    pageState.fingerprint = fp;
+    hint.textContent =
+      ctx.site === "gmail"
+        ? "Gmail thread — details from From header + signature scan."
+        : `Active tab: ${ctx.site}`;
+    renderPersonCard(ctx.person);
+    if (fp !== lastMatchedFingerprint) {
+      status.textContent = "Matching…";
+    }
+    await matchCurrentPerson(ctx.person, fp);
+    if ($("contextStatus").textContent === "Matching…") {
+      status.textContent = "";
+    }
+  } catch (e) {
+    hint.textContent = "Could not read the active tab. Is Gmail open?";
+    status.textContent = e.message || "";
+    pageState = { person: null, matchResult: null, site: null, fingerprint: "" };
+    lastMatchedFingerprint = "";
+    renderPersonCard(null);
+    renderMatches(null);
+    renderNba();
+  }
+}
+
+$("refreshContext")?.addEventListener("click", () => refreshPageContext());
+$("captureLeadBtn")?.addEventListener("click", () => captureCurrentLead());
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "PAGE_CONTEXT_UPDATED") {
+    const crmTab = $("tab-crm");
+    if (!crmTab?.classList.contains("active")) return;
+    clearTimeout(contextRefreshTimer);
+    contextRefreshTimer = setTimeout(() => refreshPageContext(), 350);
+  }
+});
+
 async function searchLeads() {
   const status = $("crmStatus");
   const list = $("leadList");
@@ -253,6 +573,7 @@ async function searchLeads() {
       li.querySelectorAll("span")[0].textContent =
         [lead.job_title, company].filter(Boolean).join(" · ") || "No title";
       li.querySelectorAll("span")[1].textContent = `${lead.status || "—"} · ${lead.source || "—"}`;
+      li.addEventListener("click", () => openCrmRecord("lead", lead.id));
       list.appendChild(li);
     }
     status.textContent = `${leads.length} lead${leads.length === 1 ? "" : "s"}`;
@@ -350,6 +671,7 @@ loadSettings()
       await chrome.runtime.sendMessage({ type: "APPLY_UPDATE" });
     }
   })
+  .then(refreshPageContext)
   .then(searchLeads)
   .then(refreshDeepStatus)
   .catch(() => {});

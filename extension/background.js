@@ -357,7 +357,71 @@ chrome.runtime.onMessageExternal.addListener((msg, _sender, sendResponse) => {
   return false;
 });
 
+/** Latest page context from content scripts, keyed by tab id. */
+const pageContextByTab = new Map();
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "PAGE_CONTEXT") {
+    const tabId = sender.tab?.id;
+    if (tabId != null) {
+      pageContextByTab.set(tabId, {
+        tabId,
+        site: msg.site || "unknown",
+        empty: Boolean(msg.empty),
+        fingerprint: msg.fingerprint || "",
+        person: msg.person || null,
+        at: Date.now(),
+      });
+    }
+    // Notify sidepanel (and other extension pages) if open
+    chrome.runtime.sendMessage({ type: "PAGE_CONTEXT_UPDATED" }).catch(() => {});
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg?.type === "GET_PAGE_CONTEXT") {
+    const reply = (tabId) => {
+      const cached = tabId != null ? pageContextByTab.get(tabId) : null;
+      sendResponse({ ok: true, context: cached || null, tabId: tabId || null });
+    };
+    if (msg.tabId != null) {
+      reply(msg.tabId);
+      return false;
+    }
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }).then((tabs) => {
+      reply(tabs[0]?.id);
+    });
+    return true;
+  }
+  if (msg?.type === "REQUEST_PAGE_PARSE") {
+    const run = async () => {
+      const tabs = await chrome.tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      const tab = tabs[0];
+      if (!tab?.id) return { ok: false, error: "No active tab" };
+      try {
+        const res = await chrome.tabs.sendMessage(tab.id, {
+          type: "SCRM_GET_PAGE_PERSON",
+        });
+        if (res?.person) {
+          pageContextByTab.set(tab.id, {
+            tabId: tab.id,
+            site: "gmail",
+            empty: false,
+            fingerprint: res.fingerprint || "",
+            person: res.person,
+            at: Date.now(),
+          });
+        }
+        return { ok: Boolean(res?.ok), person: res?.person || null, tabId: tab.id };
+      } catch (e) {
+        return { ok: false, error: e?.message || "Content script unavailable" };
+      }
+    };
+    run().then(sendResponse);
+    return true;
+  }
   if (msg?.type === "CHECK_UPDATE") {
     checkForUpdate({ apply: Boolean(msg.apply) })
       .then((update) => sendResponse({ ok: true, update }))

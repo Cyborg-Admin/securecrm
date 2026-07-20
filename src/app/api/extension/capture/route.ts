@@ -13,6 +13,8 @@ const experienceSchema = z.object({
   location: z.string().max(300).optional().nullable(),
   startedOn: z.string().max(80).optional().nullable(),
   endedOn: z.string().max(80).optional().nullable(),
+  startedOnSort: z.string().max(10).optional().nullable(),
+  endedOnSort: z.string().max(10).optional().nullable(),
   isCurrent: z.boolean().optional(),
   rawText: z.string().max(2000).optional().nullable(),
   sortOrder: z.number().int().min(0).max(200).optional(),
@@ -114,13 +116,14 @@ export async function POST(req: NextRequest) {
 
   for (const lead of parsed.data.leads) {
     try {
+      const { headline: _ignoredHeadline, ...leadFields } = lead;
       const out = await captureLead({
         organizationId: user.organization_id,
         actorUserId: user.id,
         source: parsed.data.source,
         sourceUrl: parsed.data.sourceUrl,
         batchId,
-        ...lead,
+        ...leadFields,
       });
       if (out.created) created += 1;
       else updated += 1;

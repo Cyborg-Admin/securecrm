@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/client-api";
 
 type ProfileResponse = {
@@ -84,8 +83,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <AppShell>
-      <div className="fade-up">
+    <>
+      <div>
         <p className="page-kicker">Account</p>
         <h1 className="display mt-1 text-3xl md:text-4xl">My profile</h1>
         <p className="mt-2 text-[var(--neo-muted)]">
@@ -186,6 +185,6 @@ export default function ProfilePage() {
           {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

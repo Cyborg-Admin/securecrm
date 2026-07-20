@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client-api";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { QuickFab } from "@/components/QuickFab";
+import { AppShellSkeleton } from "@/components/skeletons";
 
 type MeResponse = {
   user: {
@@ -19,6 +20,35 @@ type MeResponse = {
   features?: Record<string, boolean>;
   appVersion?: string;
 };
+
+const ME_CACHE_KEY = "kinetic.me.v1";
+
+function readMeCache(): MeResponse | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(ME_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as MeResponse;
+  } catch {
+    return null;
+  }
+}
+
+function writeMeCache(data: MeResponse) {
+  try {
+    sessionStorage.setItem(ME_CACHE_KEY, JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearMeCache() {
+  try {
+    sessionStorage.removeItem(ME_CACHE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 type NavItem = {
   href: string;
@@ -172,17 +202,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [ready, setReady] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const cached = readMeCache();
+    if (cached?.user?.id) {
+      setMe(cached);
+      setReady(true);
+    }
     try {
       setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
     } catch {
       /* ignore */
     }
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -198,17 +235,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     api<MeResponse>("/api/auth/me")
       .then((data) => {
-        if (!cancelled) {
-          setMe(data);
-          setReady(true);
-        }
+        if (cancelled) return;
+        setMe(data);
+        writeMeCache(data);
+        setReady(true);
       })
       .catch(() => {
-        if (!cancelled) {
-          setMe(null);
-          setReady(false);
-          router.replace("/login");
-        }
+        if (cancelled) return;
+        clearMeCache();
+        setMe(null);
+        setReady(false);
+        router.replace("/login");
       });
     return () => {
       cancelled = true;
@@ -240,17 +277,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
+    clearMeCache();
     await api("/api/auth/logout", { method: "POST" });
     router.replace("/login");
     router.refresh();
   }
 
-  if (!ready || !me) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-[var(--neo-muted)]">Verifying session…</p>
-      </div>
-    );
+  if (!hydrated || !ready || !me) {
+    return <AppShellSkeleton />;
   }
 
   const perms = new Set(me.user.permissions || []);

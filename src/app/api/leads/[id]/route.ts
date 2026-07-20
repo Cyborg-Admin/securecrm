@@ -25,20 +25,26 @@ const patchSchema = z.object({
 
 type Ctx = { params: Promise<{ id: string }> };
 
+async function loadLeadWithOwner(id: string, organizationId: string) {
+  const db = await getDbAsync();
+  return db
+    .prepare(
+      `SELECT l.*, u.full_name as owner_name, c.name as company_display
+       FROM leads l
+       LEFT JOIN users u
+         ON u.id = l.owner_user_id AND u.organization_id = l.organization_id
+       LEFT JOIN companies c
+         ON c.id = l.company_id AND c.organization_id = l.organization_id
+       WHERE l.id = ? AND l.organization_id = ?`,
+    )
+    .get(id, organizationId);
+}
+
 export async function GET(req: NextRequest, ctx: Ctx) {
   const user = await requireUser(req, "leads:read");
   if (isResponse(user)) return user;
   const { id } = await ctx.params;
-  const db = await getDbAsync();
-  const lead = await db
-    .prepare(
-      `SELECT l.*, u.full_name as owner_name, c.name as company_display
-       FROM leads l
-       LEFT JOIN users u ON u.id = l.owner_user_id
-       LEFT JOIN companies c ON c.id = l.company_id
-       WHERE l.id = ? AND l.organization_id = ?`,
-    )
-    .get(id, user.organization_id);
+  const lead = await loadLeadWithOwner(id, user.organization_id);
   if (!lead) return error("Lead not found", 404);
   return json({ lead });
 }
@@ -93,7 +99,6 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
        industry = COALESCE(?, industry),
        website = COALESCE(?, website),
        location = COALESCE(?, location),
-       headline = COALESCE(?, headline),
        status = COALESCE(?, status),
        metadata_json = COALESCE(?, metadata_json),
        updated_at = datetime('now')
@@ -108,14 +113,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       d.industry ?? null,
       d.website ?? null,
       d.location ?? null,
-      d.headline ?? null,
       d.status ?? null,
       d.metadata ? JSON.stringify(d.metadata) : null,
       id,
       user.organization_id,
     );
 
-  const lead = await db.prepare("SELECT * FROM leads WHERE id = ?").get(id);
+  const lead = await loadLeadWithOwner(id, user.organization_id);
 
   await writeAudit({
     organizationId: user.organization_id,

@@ -218,6 +218,169 @@
     };
   }
 
+  const MONTH_MAP = {
+    jan: "01",
+    january: "01",
+    feb: "02",
+    february: "02",
+    mar: "03",
+    march: "03",
+    apr: "04",
+    april: "04",
+    may: "05",
+    jun: "06",
+    june: "06",
+    jul: "07",
+    july: "07",
+    aug: "08",
+    august: "08",
+    sep: "09",
+    sept: "09",
+    september: "09",
+    oct: "10",
+    october: "10",
+    nov: "11",
+    november: "11",
+    dec: "12",
+    december: "12",
+  };
+
+  /** Normalize "Jan 2020" / "2020" → "YYYY-MM" for sorting. */
+  function toSortMonth(part) {
+    if (!part || /present/i.test(part)) return null;
+    const t = String(part).replace(/\s+/g, " ").trim();
+    const withMonth = t.match(
+      /^(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{4})$/i,
+    );
+    if (withMonth) {
+      const mm = MONTH_MAP[withMonth[1].toLowerCase()];
+      return mm ? `${withMonth[2]}-${mm}` : `${withMonth[2]}-01`;
+    }
+    const yearOnly = t.match(/^(\d{4})$/);
+    if (yearOnly) return `${yearOnly[1]}-01`;
+    return null;
+  }
+
+  /**
+   * Parse LinkedIn experience date lines into display + sort keys.
+   * Handles: "Jan 2020 – Present", "2021 – 2023", "Mar 2019 – Dec 2020 · 1 yr 10 mos"
+   */
+  function parseExperienceDates(dateLine, fallbackText = "") {
+    const raw = String(dateLine || fallbackText || "");
+    const primary = raw.split("·")[0].trim() || raw.trim();
+    const isCurrent = /\bpresent\b/i.test(primary) || /\bpresent\b/i.test(raw);
+
+    const month =
+      "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+    const part = `(?:${month}\\s+\\d{4}|\\d{4})`;
+    const rangeRe = new RegExp(
+      `(${part})\\s*[-–—]\\s*(${part}|Present)`,
+      "i",
+    );
+    const range = primary.match(rangeRe) || raw.match(rangeRe);
+
+    let startedOn = null;
+    let endedOn = null;
+    if (range) {
+      startedOn = range[1].replace(/\s+/g, " ").trim();
+      endedOn = /present/i.test(range[2])
+        ? null
+        : range[2].replace(/\s+/g, " ").trim();
+    } else {
+      const single = primary.match(
+        new RegExp(`^(${month}\\s+\\d{4}|\\d{4})$`, "i"),
+      );
+      if (single) {
+        startedOn = single[1].replace(/\s+/g, " ").trim();
+        if (isCurrent) endedOn = null;
+      }
+    }
+
+    return {
+      startedOn,
+      endedOn,
+      isCurrent: Boolean(isCurrent),
+      startedOnSort: toSortMonth(startedOn),
+      endedOnSort: isCurrent ? null : toSortMonth(endedOn),
+    };
+  }
+
+  function parseConnectionCountText(raw) {
+    const text = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!text) return null;
+    const m =
+      text.match(/([\d,]+)\+?\s*connections?/i) ||
+      text.match(/^([\d,]+)\+?$/);
+    if (!m) return null;
+    const rawLabel = /connection/i.test(text)
+      ? text.match(/[\d,]+\+?\s*connections?/i)?.[0] || text
+      : text;
+    const n = parseInt(m[1].replace(/,/g, ""), 10);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return {
+      connectionCount: n,
+      connectionCountRaw: rawLabel.includes("+")
+        ? rawLabel
+        : text.includes("+")
+          ? `${n}+`
+          : String(n),
+    };
+  }
+
+  function scrapeConnectionCountFromCode() {
+    const html = document.documentElement.innerHTML.slice(0, 900000);
+    const patterns = [
+      /"connectionsCount"\s*:\s*(\d+)/i,
+      /"followerCount"\s*:\s*(\d+)/i,
+      /"connectionCount"\s*:\s*(\d+)/i,
+      /(\d{2,})\+?\s*connections/i,
+    ];
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (!m) continue;
+      const n = parseInt(m[1].replace(/,/g, ""), 10);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      const plus = /\+/.test(m[0]);
+      return {
+        connectionCount: n,
+        connectionCountRaw: plus ? `${n}+` : String(n),
+      };
+    }
+    return null;
+  }
+
+  function scrapeConnectionCountDom() {
+    const selectors = [
+      'a[href*="/overlay/contact-info/"]',
+      'a[href*="connections"]',
+      'a[href*="/search/results/people"]',
+      "span.t-bold",
+      ".pv-top-card--list-bullet li",
+      ".pv-top-card__connections",
+      "main .text-body-small",
+    ];
+    for (const sel of selectors) {
+      for (const el of document.querySelectorAll(sel)) {
+        if (SecureCRM.isOurUi?.(el)) continue;
+        const parsed = parseConnectionCountText(SecureCRM.text(el));
+        if (parsed && parsed.connectionCount >= 1) return parsed;
+      }
+    }
+    // Broader top-card scan
+    const top =
+      document.querySelector("main section") ||
+      document.querySelector(".pv-top-card") ||
+      document.querySelector("main");
+    if (top) {
+      const blob = SecureCRM.text(top).slice(0, 1200);
+      const parsed = parseConnectionCountText(
+        blob.match(/[\d,]+\+?\s*connections?/i)?.[0] || "",
+      );
+      if (parsed) return parsed;
+    }
+    return scrapeConnectionCountFromCode();
+  }
+
   function firstCleanText(selectors) {
     for (const sel of selectors) {
       for (const el of document.querySelectorAll(sel)) {
@@ -302,31 +465,52 @@
         /* ignore bad recipe */
       }
     }
+    // Prefer trained experience root before fragile LinkedIn defaults
     const roots = [
       ...trainedRoots,
-      ...document.querySelectorAll("#experience ~ div, #experience + div"),
       ...document.querySelectorAll(
-        'section[id*="experience" i], section[data-section="experience"]',
+        "#experience ~ div.pvs-list__outer-container, #experience ~ div, #experience + div",
       ),
       ...document.querySelectorAll(
-        '.pvs-list__container, .experience-section, [data-view-name="profile-component-entity"]',
+        'section[id*="experience" i], section[data-section="experience"], section.experience-section',
+      ),
+      ...document.querySelectorAll(
+        '.pvs-list__container, [id="experience"] ~ * .pvs-list',
       ),
     ];
 
-    const cards = new Set();
+    const rawCards = new Set();
     for (const root of roots) {
       for (const li of root.querySelectorAll(
         "li, .pvs-entity, [data-view-name='profile-component-entity']",
       )) {
-        cards.add(li);
+        rawCards.add(li);
       }
     }
 
-    // Also scan profile main for experience-like blocks
-    if (!cards.size) {
+    if (!rawCards.size) {
       for (const li of document.querySelectorAll("main li")) {
         const t = SecureCRM.text(li).slice(0, 200);
-        if (/present|·|–|-|\d{4}/i.test(t) && t.length > 20) cards.add(li);
+        if (/present|·|–|-|\d{4}/i.test(t) && t.length > 20) rawCards.add(li);
+      }
+    }
+
+    // Expand nested multi-role company blocks into role cards; skip wrappers
+    const cards = new Set();
+    for (const card of rawCards) {
+      const nested = [
+        ...card.querySelectorAll(
+          ":scope > div ul > li, :scope ul.pvs-list > li, :scope .pvs-entity__sub-components li",
+        ),
+      ].filter((n) => n !== card);
+      const nestedWithDates = nested.filter((n) => {
+        const t = SecureCRM.text(n).slice(0, 240);
+        return /\d{4}|present/i.test(t) && t.length > 12;
+      });
+      if (nestedWithDates.length >= 1) {
+        for (const n of nestedWithDates) cards.add(n);
+      } else {
+        cards.add(card);
       }
     }
 
@@ -335,32 +519,52 @@
       if (SecureCRM.isOurUi?.(card)) continue;
       const text = SecureCRM.text(card).slice(0, 500);
       if (!text || text.length < 8) continue;
-      if (/^see more|^show all/i.test(text)) continue;
+      if (/^see more|^show all|^show fewer/i.test(text)) continue;
       if (SecureCRM.isNoiseText?.(text)) continue;
 
       const title =
         SecureCRM.text(
           card.querySelector(
-            '.t-bold span[aria-hidden="true"], .mr1.t-bold span[aria-hidden="true"], h3, .hoverable-link-text',
+            '.t-bold span[aria-hidden="true"], .mr1.t-bold span[aria-hidden="true"], h3 span[aria-hidden="true"], h3, .hoverable-link-text span[aria-hidden="true"], .hoverable-link-text',
           ),
         ) ||
         text.split(/[·|]/)[0]?.trim() ||
         null;
 
-      const companyLink = card.querySelector('a[href*="/company/"]');
-      const companyName =
+      const companyLink =
+        card.querySelector('a[href*="/company/"]') ||
+        card.parentElement?.closest?.("li")?.querySelector?.('a[href*="/company/"]') ||
+        null;
+      let companyName =
         SecureCRM.text(
           card.querySelector(
-            '.t-14.t-normal span[aria-hidden="true"], .t-14.t-normal',
+            '.t-14.t-normal span[aria-hidden="true"], .t-14.t-normal:not(.t-black--light)',
           ),
         ) ||
         SecureCRM.text(companyLink) ||
         null;
+      // Nested role: company often lives on parent entity
+      if (!companyName) {
+        const parentEntity = card.closest(
+          "[data-view-name='profile-component-entity']",
+        );
+        if (parentEntity && parentEntity !== card) {
+          companyName =
+            SecureCRM.text(
+              parentEntity.querySelector(
+                '.t-bold span[aria-hidden="true"], a[href*="/company/"] span[aria-hidden="true"]',
+              ),
+            ) || companyName;
+        }
+      }
 
       const logoImg =
         card.querySelector('a[href*="/company/"] img') ||
         card.querySelector(".pvs-entity__image-container img") ||
-        card.querySelector("img.evi-image");
+        card.querySelector("img.evi-image") ||
+        card
+          .closest("[data-view-name='profile-component-entity']")
+          ?.querySelector?.("img.evi-image, .pvs-entity__image-container img");
       const companyLogoUrl = absMediaUrl(
         logoImg?.src || logoImg?.getAttribute("src"),
       );
@@ -368,43 +572,54 @@
       const dateLine =
         SecureCRM.text(
           card.querySelector(
-            '.pvs-entity__caption-wrapper, .t-14.t-normal.t-black--light span[aria-hidden="true"]',
+            '.pvs-entity__caption-wrapper, span.pvs-entity__caption-wrapper, .t-14.t-normal.t-black--light span[aria-hidden="true"], .t-14.t-normal.t-black--light',
           ),
         ) || "";
-      const isCurrent = /present/i.test(dateLine) || /present/i.test(text);
-      let startedOn = null;
-      let endedOn = null;
-      const range = dateLine.match(
-        /([A-Za-z]{3,9}\s+\d{4}|\d{4})\s*[-–—]\s*([A-Za-z]{3,9}\s+\d{4}|\d{4}|Present)/i,
-      );
-      if (range) {
-        startedOn = range[1];
-        endedOn = /present/i.test(range[2]) ? null : range[2];
+      const dates = parseExperienceDates(dateLine, text);
+
+      // Location: often the line after the date range
+      const lightLines = [
+        ...card.querySelectorAll(
+          ".t-14.t-normal.t-black--light span[aria-hidden='true'], .t-14.t-normal.t-black--light",
+        ),
+      ]
+        .map((el) => SecureCRM.text(el))
+        .filter(Boolean);
+      let location = null;
+      for (const line of lightLines) {
+        if (line === dateLine) continue;
+        if (/\d{4}|present|·\s*\d/i.test(line) && /[-–—]/.test(line)) continue;
+        if (line.length > 2 && line.length < 120) {
+          location = line;
+          break;
+        }
       }
 
       if (!title && !companyName) continue;
-      // Skip obvious non-experience noise
-      if (/^activity|^about|^education/i.test(title || "")) continue;
+      if (/^activity|^about|^education|^licenses|^skills/i.test(title || "")) {
+        continue;
+      }
 
       experiences.push({
         title,
         companyName,
         companyLinkedinUrl: companyLink?.href || null,
         companyLogoUrl,
-        location: null,
-        startedOn,
-        endedOn,
-        isCurrent,
+        location,
+        startedOn: dates.startedOn,
+        endedOn: dates.endedOn,
+        startedOnSort: dates.startedOnSort,
+        endedOnSort: dates.endedOnSort,
+        isCurrent: dates.isCurrent,
         rawText: text,
         sortOrder: order++,
       });
       if (experiences.length >= 40) break;
     }
 
-    // Deduplicate by title+company
     const seen = new Set();
     return experiences.filter((e) => {
-      const k = `${(e.title || "").toLowerCase()}|${(e.companyName || "").toLowerCase()}`;
+      const k = `${(e.title || "").toLowerCase()}|${(e.companyName || "").toLowerCase()}|${e.startedOn || ""}`;
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
@@ -430,6 +645,7 @@
       companyName: SecureCRMRecipe?.applyField?.(fields, "companyName"),
       location: SecureCRMRecipe?.applyField?.(fields, "location"),
       headline: SecureCRMRecipe?.applyField?.(fields, "headline"),
+      connectionCount: SecureCRMRecipe?.applyField?.(fields, "connectionCount"),
     };
 
     const experiences = scrapeExperiences(fields?.experienceRoot?.css);
@@ -443,6 +659,9 @@
       fromDom?.metadata?.companyLogoUrl ||
       null;
     const bio = media.bio || fromDom?.metadata?.bio || null;
+
+    const trainedConnections = parseConnectionCountText(trained.connectionCount);
+    const connections = trainedConnections || scrapeConnectionCountDom();
 
     return {
       linkedinUrl:
@@ -479,11 +698,18 @@
           photoUrl && "photo",
           companyLogoUrl && "logo",
           bio && "bio",
+          connections && "connections",
         ].filter(Boolean),
         recipeFields: Object.keys(fields),
         photoUrl,
         companyLogoUrl,
         bio,
+        ...(connections
+          ? {
+              connectionCount: connections.connectionCount,
+              connectionCountRaw: connections.connectionCountRaw,
+            }
+          : {}),
       },
     };
   }

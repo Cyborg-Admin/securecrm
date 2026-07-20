@@ -2,8 +2,8 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { DeleteRecordButton } from "@/components/DeleteRecordButton";
+import { PageListSkeleton, RecordListSkeleton } from "@/components/skeletons";
 import { api } from "@/lib/client-api";
 
 type Opp = {
@@ -46,6 +46,7 @@ function OpportunitiesInner() {
   const [quantity, setQuantity] = useState("1");
   const [selected, setSelected] = useState<Opp | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [form, setForm] = useState({
     name: "",
     companyId: "",
@@ -71,29 +72,36 @@ function OpportunitiesInner() {
   }
 
   async function load() {
-    const [o, s, c, ct, p] = await Promise.all([
-      api<{ opportunities: Opp[] }>("/api/opportunities"),
-      api<{ stages: Stage[] }>("/api/pipeline-stages?pipeline=opportunity"),
-      api<{ companies: Company[] }>("/api/companies"),
-      api<{ contacts: Contact[] }>("/api/contacts"),
-      api<{ products: Product[] }>("/api/products?active=1").catch(() => ({
-        products: [] as Product[],
-      })),
-    ]);
-    setOpps(o.opportunities);
-    setStages(s.stages);
-    setCompanies(c.companies || []);
-    setContacts(ct.contacts || []);
-    setProducts(p.products || []);
-    const openId = search.get("open");
-    if (openId) {
-      const found = o.opportunities.find((x) => x.id === openId);
-      if (found) void selectOpp(found);
+    try {
+      const [o, s, c, ct, p] = await Promise.all([
+        api<{ opportunities: Opp[] }>("/api/opportunities"),
+        api<{ stages: Stage[] }>("/api/pipeline-stages?pipeline=opportunity"),
+        api<{ companies: Company[] }>("/api/companies"),
+        api<{ contacts: Contact[] }>("/api/contacts"),
+        api<{ products: Product[] }>("/api/products?active=1").catch(() => ({
+          products: [] as Product[],
+        })),
+      ]);
+      setOpps(o.opportunities);
+      setStages(s.stages);
+      setCompanies(c.companies || []);
+      setContacts(ct.contacts || []);
+      setProducts(p.products || []);
+      const openId = search.get("open");
+      if (openId) {
+        const found = o.opportunities.find((x) => x.id === openId);
+        if (found) void selectOpp(found);
+      }
+    } finally {
+      setInitialLoading(false);
     }
   }
 
   useEffect(() => {
-    void load().catch((e) => setError(e.message));
+    void load().catch((e) => {
+      setError(e.message);
+      setInitialLoading(false);
+    });
   }, []);
 
   async function create(e: FormEvent) {
@@ -237,7 +245,11 @@ function OpportunitiesInner() {
       </form>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
-        <ul className="neo-raised max-h-[65vh] space-y-2 overflow-auto p-3">
+        <div className="neo-raised max-h-[65vh] overflow-auto p-3">
+          {initialLoading ? (
+            <RecordListSkeleton rows={5} />
+          ) : (
+            <ul className="space-y-2">
           {opps.map((o) => (
             <li key={o.id}>
               <button
@@ -264,7 +276,9 @@ function OpportunitiesInner() {
               </button>
             </li>
           ))}
-        </ul>
+            </ul>
+          )}
+        </div>
 
         <aside className="neo-raised p-4">
           {selected ? (
@@ -383,10 +397,8 @@ function OpportunitiesInner() {
 
 export default function OpportunitiesPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading…</p>}>
-        <OpportunitiesInner />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<PageListSkeleton />}>
+      <OpportunitiesInner />
+    </Suspense>
   );
 }

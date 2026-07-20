@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     sourcesUrl: `${base}/api/extension/sources`,
     autoUpdate: true,
     releaseNotes:
-      "Scrape isolation: ignore KINETIC injected UI. Platform: delete leads/contacts/accounts/opps/events with related-object checks.",
+      "LinkedIn: connection count + stronger Experience date ranges and logos. Train mode: click live elements (connection count, Experience section).",
     minAppVersion: "0.1.0",
     checkedAt: new Date().toISOString(),
   });
