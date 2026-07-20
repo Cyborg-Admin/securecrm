@@ -7,7 +7,16 @@ import { ensureDefaultStages } from "@/lib/pipelines";
 let bootstrapped = false;
 let bootstrapPromise: Promise<void> | null = null;
 
+/** Coolify injects DATABASE_URL into the Docker build; never touch prod DB then. */
+function isNextProductionBuild(): boolean {
+  return (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.npm_lifecycle_event === "build"
+  );
+}
+
 export async function bootstrapApp(): Promise<void> {
+  if (isNextProductionBuild()) return;
   if (bootstrapped) return;
   if (bootstrapPromise) return bootstrapPromise;
 

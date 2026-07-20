@@ -139,9 +139,19 @@ CREATE TABLE IF NOT EXISTS leads (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_linkedin
   ON leads(organization_id, linkedin_uid)
   WHERE linkedin_uid IS NOT NULL AND linkedin_uid != '';
-CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_email
-  ON leads(organization_id, email)
-  WHERE email IS NOT NULL AND email != '';
+-- Guard: older leads tables may not have email yet (added by migrations).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'email'
+  ) THEN
+    EXECUTE $idx$
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_email
+        ON leads(organization_id, email)
+        WHERE email IS NOT NULL AND email != ''
+    $idx$;
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_leads_org_owner ON leads(organization_id, owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_leads_org_status ON leads(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_leads_org_company ON leads(organization_id, company_id);
@@ -205,7 +215,16 @@ CREATE TABLE IF NOT EXISTS contacts (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_linkedin
   ON contacts(organization_id, linkedin_uid)
   WHERE linkedin_uid IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contacts_org_email ON contacts(organization_id, email);
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'contacts' AND column_name = 'email'
+  ) THEN
+    EXECUTE $idx$
+      CREATE INDEX IF NOT EXISTS idx_contacts_org_email ON contacts(organization_id, email)
+    $idx$;
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_contacts_org_name ON contacts(organization_id, full_name);
 
 CREATE TABLE IF NOT EXISTS ownership_transfers (

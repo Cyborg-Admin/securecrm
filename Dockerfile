@@ -14,6 +14,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Keep `next build` offline from Coolify's injected prod DATABASE_URL.
+ENV DB_DRIVER=sqlite
+ENV SQLITE_PATH=/tmp/securecrm-build.sqlite
+ENV DATABASE_URL=
 RUN npm run build
 
 FROM node:24-bookworm-slim AS runner

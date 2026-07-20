@@ -316,6 +316,15 @@ export async function runMigrations(): Promise<void> {
   }
 
   await migrateLeadsIdentity();
+  if (!(await columnExists("contacts", "email"))) {
+    if (db.driver === "sqlite") {
+      await db.exec(`ALTER TABLE contacts ADD COLUMN email TEXT`);
+    } else {
+      await db.exec(
+        `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email TEXT`,
+      );
+    }
+  }
   await ensureEmailTables();
   await migrateLeadExperiencesColumns();
   await migrateLeadPipelineKey();

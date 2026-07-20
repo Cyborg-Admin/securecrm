@@ -196,6 +196,13 @@ export async function getDbAsync(): Promise<DbClient> {
   return getDb();
 }
 
+function isMissingColumnError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as { code?: string; message?: string };
+  if (e.code === "42703") return true;
+  return /column ["'].*["'] does not exist/i.test(String(e.message || err));
+}
+
 export async function ensureSchema(): Promise<void> {
   const db = await getDbAsync();
   if (db.driver === "sqlite") {
@@ -214,7 +221,13 @@ export async function ensureSchema(): Promise<void> {
       "setup.sql",
     );
     const schema = fs.readFileSync(schemaPath, "utf8");
-    await db.exec(schema);
+    // Existing prod DBs may predate columns referenced by setup.sql indexes.
+    // Apply what we can, then let runMigrations() add missing columns/indexes.
+    try {
+      await db.exec(schema);
+    } catch (err) {
+      if (!isMissingColumnError(err)) throw err;
+    }
   }
 
   const { runMigrations } = await import("@/lib/migrations");
