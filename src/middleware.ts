@@ -5,6 +5,7 @@ const SESSION_COOKIE = "scrm_session";
 const PUBLIC_EXACT = new Set([
   "/login",
   "/auth/magic",
+  "/auth/reset-password",
   "/favicon.ico",
 ]);
 
@@ -12,6 +13,7 @@ const PUBLIC_PREFIXES = [
   "/_next/",
   "/api/auth/login",
   "/api/auth/magic",
+  "/api/auth/password",
   "/api/auth/mail-health",
   "/api/extension/",
 ];

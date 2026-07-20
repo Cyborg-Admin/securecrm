@@ -328,6 +328,23 @@ export async function runMigrations(): Promise<void> {
   await ensureEmailTables();
   await migrateLeadExperiencesColumns();
   await migrateLeadPipelineKey();
+  await migrateMagicLinkPurpose();
+}
+
+/** Distinguish login magic links from password-reset links. */
+async function migrateMagicLinkPurpose(): Promise<void> {
+  const db = await getDbAsync();
+  if (!(await tableExists("magic_links"))) return;
+  if (await columnExists("magic_links", "purpose")) return;
+  if (db.driver === "sqlite") {
+    await db.exec(
+      `ALTER TABLE magic_links ADD COLUMN purpose TEXT NOT NULL DEFAULT 'login'`,
+    );
+  } else {
+    await db.exec(
+      `ALTER TABLE magic_links ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'login'`,
+    );
+  }
 }
 
 /** Role history: logos + YYYY-MM sort keys for date ranges. */

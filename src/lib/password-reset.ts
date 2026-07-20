@@ -1,13 +1,23 @@
+import bcrypt from "bcryptjs";
 import { getDbAsync } from "@/lib/db";
 import { newId, newToken } from "@/lib/ids";
-import { hashToken, isUserActive, createSessionForUser } from "@/lib/auth";
+import {
+  hashToken,
+  isUserActive,
+  createSessionForUser,
+  type AuthUser,
+} from "@/lib/auth";
 import { appBaseUrl, sendEmail } from "@/lib/mail";
 import { writeAudit } from "@/lib/audit";
 import { ensurePrimaryAdmin } from "@/lib/bootstrap";
 
-const MAGIC_TTL_MINUTES = 20;
+const RESET_TTL_MINUTES = 30;
 
-export async function requestMagicLink(input: {
+export function userHasUsablePassword(passwordHash: string): boolean {
+  return Boolean(passwordHash) && !passwordHash.startsWith("!");
+}
+
+export async function requestPasswordReset(input: {
   email: string;
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -16,13 +26,11 @@ export async function requestMagicLink(input: {
   accepted: true;
   mailed: boolean;
   mailError?: string;
-  /** Only returned outside production when mail is not configured. */
-  devMagicUrl?: string;
+  devResetUrl?: string;
 }> {
   const db = await getDbAsync();
   const email = input.email.trim().toLowerCase();
 
-  // Self-heal missing primary admins (e.g. first deploy before seed stuck).
   if (
     email === "louis@cyborggroup.com" ||
     email === (process.env.BOOTSTRAP_ADMIN_EMAIL || "").toLowerCase()
@@ -30,7 +38,7 @@ export async function requestMagicLink(input: {
     try {
       await ensurePrimaryAdmin();
     } catch (e) {
-      console.error("[magic-link] ensurePrimaryAdmin failed", e);
+      console.error("[password-reset] ensurePrimaryAdmin failed", e);
     }
   }
 
@@ -49,23 +57,20 @@ export async function requestMagicLink(input: {
 
   // Always accept — do not reveal whether the account exists.
   if (!user || !isUserActive(user.is_active)) {
-    console.info("[magic-link] no active user for requested email");
     return { accepted: true, mailed: false };
   }
-
-  console.info("[magic-link] issuing link for user", user.id);
 
   const token = newToken(32);
   const id = newId();
   const expires = new Date(
-    Date.now() + MAGIC_TTL_MINUTES * 60 * 1000,
+    Date.now() + RESET_TTL_MINUTES * 60 * 1000,
   ).toISOString();
 
   await db
     .prepare(
       `INSERT INTO magic_links
        (id, user_id, organization_id, token_hash, purpose, expires_at, ip_address, user_agent)
-       VALUES (?, ?, ?, ?, 'login', ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'password_reset', ?, ?, ?)`,
     )
     .run(
       id,
@@ -78,21 +83,21 @@ export async function requestMagicLink(input: {
     );
 
   const base = appBaseUrl(input.origin);
-  const magicUrl = `${base}/auth/magic?token=${encodeURIComponent(token)}`;
+  const resetUrl = `${base}/auth/reset-password?token=${encodeURIComponent(token)}`;
 
   const mail = await sendEmail({
     to: user.email,
-    subject: "Your KINETIC sign-in link",
-    text: `Hi ${user.full_name},\n\nSign in to KINETIC:\n${magicUrl}\n\nThis link expires in ${MAGIC_TTL_MINUTES} minutes. If you did not request it, ignore this email.`,
+    subject: "Reset your KINETIC password",
+    text: `Hi ${user.full_name},\n\nSet a new password for KINETIC:\n${resetUrl}\n\nThis link expires in ${RESET_TTL_MINUTES} minutes. If you did not request it, ignore this email.`,
     html: `<p>Hi ${escapeHtml(user.full_name)},</p>
-<p><a href="${magicUrl}">Sign in to KINETIC</a></p>
-<p>This link expires in ${MAGIC_TTL_MINUTES} minutes. If you did not request it, ignore this email.</p>`,
+<p><a href="${resetUrl}">Set a new password</a></p>
+<p>This link expires in ${RESET_TTL_MINUTES} minutes. If you did not request it, ignore this email.</p>`,
   });
 
   await writeAudit({
     organizationId: user.organization_id,
     actorUserId: user.id,
-    action: "auth.magic_link_requested",
+    action: "auth.password_reset_requested",
     entityType: "user",
     entityId: user.id,
     ipAddress: input.ipAddress,
@@ -101,30 +106,31 @@ export async function requestMagicLink(input: {
   });
 
   if (!mail.ok) {
-    console.warn("[magic-link] email send failed:", mail.error);
-    console.info("[magic-link] sign-in URL for", user.email, magicUrl);
+    console.warn("[password-reset] email send failed:", mail.error);
+    console.info("[password-reset] URL for", user.email, resetUrl);
     return {
       accepted: true,
       mailed: false,
       mailError: mail.error,
       ...(process.env.NODE_ENV !== "production"
-        ? { devMagicUrl: magicUrl }
+        ? { devResetUrl: resetUrl }
         : {}),
     };
   }
 
   if (mail.provider === "dev") {
-    return { accepted: true, mailed: true, devMagicUrl: magicUrl };
+    return { accepted: true, mailed: true, devResetUrl: resetUrl };
   }
 
   return { accepted: true, mailed: true };
 }
 
-export async function consumeMagicLink(input: {
+export async function resetPasswordWithToken(input: {
   token: string;
+  newPassword: string;
   ipAddress?: string | null;
   userAgent?: string | null;
-}) {
+}): Promise<{ user: AuthUser; sessionToken: string; csrfToken: string } | null> {
   const db = await getDbAsync();
   const token = input.token.trim();
   if (!token || token.length < 20) return null;
@@ -145,8 +151,24 @@ export async function consumeMagicLink(input: {
 
   if (!row || row.consumed_at) return null;
   if (new Date(row.expires_at).getTime() < Date.now()) return null;
-  // Password-reset tokens are consumed by /api/auth/password/reset only.
-  if (row.purpose && row.purpose !== "login") return null;
+  if (row.purpose !== "password_reset") return null;
+
+  const active = await db
+    .prepare<{
+      id: string;
+      is_active: number | boolean | string;
+    }>("SELECT id, is_active FROM users WHERE id = ?")
+    .get(row.user_id);
+  if (!active || !isUserActive(active.is_active)) return null;
+
+  const hash = bcrypt.hashSync(input.newPassword, 12);
+
+  await db
+    .prepare(
+      `UPDATE users SET password_hash = ?, updated_at = datetime('now')
+       WHERE id = ? AND organization_id = ?`,
+    )
+    .run(hash, row.user_id, row.organization_id);
 
   await db
     .prepare(
@@ -154,20 +176,30 @@ export async function consumeMagicLink(input: {
     )
     .run(row.id);
 
-  // Invalidate sibling unused links for this user
   await db
     .prepare(
       `UPDATE magic_links SET consumed_at = datetime('now')
-       WHERE user_id = ? AND consumed_at IS NULL AND id != ?`,
+       WHERE user_id = ? AND purpose = 'password_reset'
+         AND consumed_at IS NULL AND id != ?`,
     )
     .run(row.user_id, row.id);
+
+  await writeAudit({
+    organizationId: row.organization_id,
+    actorUserId: row.user_id,
+    action: "auth.password_reset_completed",
+    entityType: "user",
+    entityId: row.user_id,
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+  });
 
   return createSessionForUser({
     userId: row.user_id,
     organizationId: row.organization_id,
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
-    auditAction: "auth.magic_link_login",
+    auditAction: "auth.password_reset_login",
   });
 }
 

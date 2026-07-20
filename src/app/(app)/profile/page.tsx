@@ -10,6 +10,7 @@ type ProfileResponse = {
     full_name: string;
     last_login_at: string | null;
     created_at: string;
+    hasPassword: boolean;
     roles: string[];
     permissions: string[];
   };
@@ -25,6 +26,9 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
+
+  const hasPassword = data?.profile.hasPassword ?? true;
 
   useEffect(() => {
     api<ProfileResponse>("/api/profile")
@@ -70,15 +74,41 @@ export default function ProfilePage() {
     try {
       await api("/api/profile", {
         method: "PATCH",
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({
+          ...(hasPassword ? { currentPassword } : {}),
+          newPassword,
+        }),
       });
       setCurrentPassword("");
       setNewPassword("");
-      setMessage("Password updated.");
+      setData((prev) =>
+        prev
+          ? { ...prev, profile: { ...prev.profile, hasPassword: true } }
+          : prev,
+      );
+      setMessage(hasPassword ? "Password updated." : "Password set. You can sign in with it next time.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Password update failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onEmailResetLink() {
+    if (!data?.profile.email) return;
+    setResetSending(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await api<{ message: string }>("/api/auth/password/forgot", {
+        method: "POST",
+        body: JSON.stringify({ email: data.profile.email }),
+      });
+      setMessage(res.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send reset link");
+    } finally {
+      setResetSending(false);
     }
   }
 
@@ -113,6 +143,15 @@ export default function ProfilePage() {
               <span className="text-[var(--neo-muted)]">Roles</span>
               <br />
               {data?.profile.roles?.join(", ") || "—"}
+            </p>
+            <p>
+              <span className="text-[var(--neo-muted)]">Password</span>
+              <br />
+              {data
+                ? hasPassword
+                  ? "Set"
+                  : "Not set (magic-link account)"
+                : "—"}
             </p>
             <p>
               <span className="text-[var(--neo-muted)]">Last login</span>
@@ -152,20 +191,33 @@ export default function ProfilePage() {
           </form>
 
           <form onSubmit={onChangePassword} className="neo-raised space-y-3 p-5">
-            <h2 className="display text-xl">Password</h2>
+            <h2 className="display text-xl">
+              {hasPassword ? "Password" : "Set a password"}
+            </h2>
+            {!hasPassword && (
+              <p className="text-sm text-[var(--neo-muted)]">
+                This account was created for magic-link sign-in, so there is no
+                current password. Choose one below, or email yourself a reset
+                link.
+              </p>
+            )}
+            {hasPassword && (
+              <label className="block text-sm">
+                <span className="text-[var(--neo-muted)]">Current password</span>
+                <input
+                  className="neo-input mt-1"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </label>
+            )}
             <label className="block text-sm">
-              <span className="text-[var(--neo-muted)]">Current password</span>
-              <input
-                className="neo-input mt-1"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="text-[var(--neo-muted)]">New password (10+ chars)</span>
+              <span className="text-[var(--neo-muted)]">
+                {hasPassword ? "New password (10+ chars)" : "Password (10+ chars)"}
+              </span>
               <input
                 className="neo-input mt-1"
                 type="password"
@@ -176,9 +228,19 @@ export default function ProfilePage() {
                 autoComplete="new-password"
               />
             </label>
-            <button className="neo-btn neo-btn-primary" disabled={saving}>
-              Update password
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className="neo-btn neo-btn-primary" disabled={saving}>
+                {hasPassword ? "Update password" : "Set password"}
+              </button>
+              <button
+                type="button"
+                className="neo-btn"
+                disabled={resetSending || !data?.profile.email}
+                onClick={() => void onEmailResetLink()}
+              >
+                {resetSending ? "Sending…" : "Email reset link"}
+              </button>
+            </div>
           </form>
 
           {message && <p className="text-sm text-[var(--accent-deep)]">{message}</p>}

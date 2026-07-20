@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { getDbAsync } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
+import { userHasUsablePassword } from "@/lib/password-reset";
 
 const patchSchema = z.object({
   fullName: z.string().min(1).max(200).optional(),
@@ -24,8 +25,9 @@ export async function GET(req: NextRequest) {
       full_name: string;
       last_login_at: string | null;
       created_at: string;
+      password_hash: string;
     }>(
-      `SELECT id, email, full_name, last_login_at, created_at
+      `SELECT id, email, full_name, last_login_at, created_at, password_hash
        FROM users WHERE id = ? AND organization_id = ?`,
     )
     .get(user.id, user.organization_id);
@@ -38,9 +40,12 @@ export async function GET(req: NextRequest) {
     )
     .get(user.organization_id);
 
+  const { password_hash: _hash, ...profile } = row;
+
   return json({
     profile: {
-      ...row,
+      ...profile,
+      hasPassword: userHasUsablePassword(row.password_hash),
       roles: user.roles,
       permissions: user.permissions,
     },
@@ -79,8 +84,7 @@ export async function PATCH(req: NextRequest) {
 
   const d = parsed.data;
   if (d.newPassword) {
-    const magicOnly = existing.password_hash.startsWith("!");
-    if (!magicOnly) {
+    if (userHasUsablePassword(existing.password_hash)) {
       if (!d.currentPassword) {
         return error("Current password required to set a new password", 400);
       }

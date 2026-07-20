@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS magic_links (
   user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   token_hash      TEXT NOT NULL UNIQUE,
+  purpose         TEXT NOT NULL DEFAULT 'login',
   expires_at      TEXT NOT NULL,
   consumed_at     TEXT,
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
