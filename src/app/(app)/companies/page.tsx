@@ -1,8 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { CreateOpportunityModal } from "@/components/CreateOpportunityModal";
+import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { SaveBadge } from "@/components/SaveBadge";
 import { useDynamicSave } from "@/hooks/useDynamicSave";
 import { api } from "@/lib/client-api";
@@ -36,8 +38,9 @@ type Related = {
 
 type Tab = "fields" | "related";
 
-export default function CompaniesPage() {
+function CompaniesInner() {
   const router = useRouter();
+  const search = useSearchParams();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Company | null>(null);
@@ -49,12 +52,18 @@ export default function CompaniesPage() {
   const [createWebsite, setCreateWebsite] = useState("");
   const [createIndustry, setCreateIndustry] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [oppOpen, setOppOpen] = useState(false);
 
   async function load(query = q) {
     const data = await api<{ companies: Company[] }>(
       `/api/companies?q=${encodeURIComponent(query)}`,
     );
     setCompanies(data.companies);
+    const openId = search.get("open");
+    if (openId) {
+      const found = data.companies.find((c) => c.id === openId);
+      if (found) void openCompany(found);
+    }
   }
 
   async function openCompany(company: Company) {
@@ -138,7 +147,7 @@ export default function CompaniesPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <h1 className="display text-3xl">Companies</h1>
       <p className="mt-1 text-[var(--neo-muted)]">
         Edit accounts and see related leads, contacts, and opportunities.
@@ -234,6 +243,22 @@ export default function CompaniesPage() {
                   </button>
                 </div>
               </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="neo-btn neo-btn-primary"
+                  onClick={() => setOppOpen(true)}
+                >
+                  Create opportunity
+                </button>
+                <button
+                  type="button"
+                  className="neo-btn"
+                  onClick={() => router.push(`/contacts`)}
+                >
+                  View contacts
+                </button>
+              </div>
               <nav className="record-tabs" aria-label="Company sections">
                 <button
                   type="button"
@@ -275,12 +300,62 @@ export default function CompaniesPage() {
                       />
                     </label>
                   ))}
+                  <section>
+                    <h3 className="record-section-title">Quick actions</h3>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="neo-btn neo-btn-primary"
+                        onClick={() => setOppOpen(true)}
+                      >
+                        Create opportunity
+                      </button>
+                      {related?.contacts?.[0] ? (
+                        <button
+                          type="button"
+                          className="neo-btn"
+                          onClick={() =>
+                            router.push(
+                              `/contacts?open=${related.contacts[0].id}`,
+                            )
+                          }
+                        >
+                          Open a contact
+                        </button>
+                      ) : null}
+                    </div>
+                  </section>
+                  <div className="border-t border-[var(--line)] pt-4">
+                    <DeleteRecordButton
+                      label="Delete account"
+                      hint="Blocked while leads, contacts, or opportunities still reference this company."
+                      onDelete={async () => {
+                        await api(`/api/companies/${selected.id}`, {
+                          method: "DELETE",
+                        });
+                        setCompanies((prev) =>
+                          prev.filter((c) => c.id !== selected.id),
+                        );
+                        setSelected(null);
+                        setOpen(false);
+                      }}
+                    />
+                  </div>
                 </div>
               )}
               {tab === "related" && (
                 <div className="space-y-5 text-sm">
                   <section>
-                    <h3 className="record-section-title">Opportunities</h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="record-section-title">Opportunities</h3>
+                      <button
+                        type="button"
+                        className="neo-btn text-xs"
+                        onClick={() => setOppOpen(true)}
+                      >
+                        New
+                      </button>
+                    </div>
                     {related?.opportunities?.length ? (
                       <ul className="mt-2 space-y-2">
                         {related.opportunities.map((o) => (
@@ -357,6 +432,31 @@ export default function CompaniesPage() {
           </div>
         ) : null}
       </aside>
+
+      {selected ? (
+        <CreateOpportunityModal
+          open={oppOpen}
+          onClose={() => setOppOpen(false)}
+          companyId={selected.id}
+          contactId={related?.contacts?.[0]?.id || null}
+          defaultName={`${selected.name} opportunity`}
+          contextLabel={`From account · ${selected.name}`}
+          onCreated={async (id) => {
+            await openCompany(selected);
+            router.push(`/opportunities?open=${id}`);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export default function CompaniesPage() {
+  return (
+    <AppShell>
+      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading companies…</p>}>
+        <CompaniesInner />
+      </Suspense>
     </AppShell>
   );
 }

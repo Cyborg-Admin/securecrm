@@ -19,24 +19,46 @@ export function error(message: string, status = 400, extra?: Record<string, unkn
   return NextResponse.json({ error: message, ...extra }, { status });
 }
 
+function extractBearer(req: NextRequest): string | null {
+  const raw = req.headers.get("authorization");
+  if (!raw) return null;
+  const m = raw.match(/^Bearer\s+(.+)$/i);
+  return m?.[1]?.trim() || null;
+}
+
 export async function requireUser(
   req: NextRequest,
   permission?: PermissionCode,
 ): Promise<AuthUser | NextResponse> {
   await bootstrapApp();
 
-  const apiKey =
-    req.headers.get("x-api-key") ||
-    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const apiKeyHeader = req.headers.get("x-api-key")?.trim() || null;
+  const bearer = extractBearer(req);
+  const sessionHeader = req.headers.get("x-session-token")?.trim() || null;
 
   let user: AuthUser | null = null;
-  if (apiKey?.startsWith("scrm_")) {
-    user = await getUserFromApiKey(apiKey);
+  let usedApiKey = false;
+
+  const apiKeyCandidate =
+    apiKeyHeader?.startsWith("scrm_")
+      ? apiKeyHeader
+      : bearer?.startsWith("scrm_")
+        ? bearer
+        : null;
+
+  if (apiKeyCandidate) {
+    user = await getUserFromApiKey(apiKeyCandidate);
+    usedApiKey = Boolean(user);
   } else {
-    const cookieToken = req.cookies.get(SESSION_COOKIE)?.value;
-    user = cookieToken
-      ? await getUserFromSessionToken(cookieToken)
-      : await getSessionUser();
+    const sessionToken = bearer || sessionHeader;
+    if (sessionToken) {
+      user = await getUserFromSessionToken(sessionToken);
+    } else {
+      const cookieToken = req.cookies.get(SESSION_COOKIE)?.value;
+      user = cookieToken
+        ? await getUserFromSessionToken(cookieToken)
+        : await getSessionUser();
+    }
   }
 
   if (!user) return error("Unauthorized", 401);
@@ -50,7 +72,7 @@ export async function requireUser(
   }
 
   const method = req.method.toUpperCase();
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !apiKey?.startsWith("scrm_")) {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !usedApiKey) {
     const csrf =
       req.headers.get("x-csrf-token") ||
       req.headers.get("x-xsrf-token");

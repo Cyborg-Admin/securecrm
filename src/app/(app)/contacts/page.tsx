@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { CreateOpportunityModal } from "@/components/CreateOpportunityModal";
+import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { SaveBadge } from "@/components/SaveBadge";
 import { QuickCreateModal } from "@/components/QuickCreateModal";
 import { useDynamicSave } from "@/hooks/useDynamicSave";
@@ -15,6 +17,7 @@ type Contact = {
   email: string | null;
   phone: string | null;
   linkedin_uid: string | null;
+  company_id?: string | null;
   company_name?: string | null;
   lead_name?: string | null;
   owner_name?: string | null;
@@ -37,6 +40,7 @@ function ContactsInner() {
   const [draft, setDraft] = useState<Partial<Contact>>({});
   const [relatedLeads, setRelatedLeads] = useState<RelatedLead[]>([]);
   const [showCreate, setShowCreate] = useState(false);
+  const [oppOpen, setOppOpen] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(false);
 
   async function load(query = q) {
@@ -60,9 +64,11 @@ function ContactsInner() {
       phone: contact.phone,
     });
     setMobileDetail(true);
-    const detail = await api<{ relatedLeads: RelatedLead[] }>(
-      `/api/contacts/${contact.id}`,
-    );
+    const detail = await api<{
+      contact: Contact;
+      relatedLeads: RelatedLead[];
+    }>(`/api/contacts/${contact.id}`);
+    if (detail.contact) setSelected(detail.contact);
     setRelatedLeads(detail.relatedLeads || []);
   }
 
@@ -178,6 +184,39 @@ function ContactsInner() {
                 </label>
               ))}
 
+              <div>
+                <p className="record-section-title">Quick actions</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="neo-btn neo-btn-primary"
+                    onClick={() => setOppOpen(true)}
+                  >
+                    Create opportunity
+                  </button>
+                  {selected.company_id ? (
+                    <button
+                      type="button"
+                      className="neo-btn"
+                      onClick={() =>
+                        router.push(`/companies?open=${selected.company_id}`)
+                      }
+                    >
+                      Open account
+                    </button>
+                  ) : null}
+                  {selected.lead_id ? (
+                    <button
+                      type="button"
+                      className="neo-btn"
+                      onClick={() => router.push(`/leads?open=${selected.lead_id}`)}
+                    >
+                      Open source lead
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="neo-inset p-3">
                 <p className="text-sm font-medium">Related leads</p>
                 <ul className="mt-2 space-y-2">
@@ -198,6 +237,17 @@ function ContactsInner() {
                   )}
                 </ul>
               </div>
+
+              <DeleteRecordButton
+                label="Delete contact"
+                hint="Blocked if this contact is on opportunities or event registrations."
+                onDelete={async () => {
+                  await api(`/api/contacts/${selected.id}`, { method: "DELETE" });
+                  setContacts((prev) => prev.filter((c) => c.id !== selected.id));
+                  setSelected(null);
+                  setMobileDetail(false);
+                }}
+              />
             </div>
           ) : (
             <p className="text-[var(--neo-muted)]">Select a contact to edit. Changes autosave.</p>
@@ -212,6 +262,22 @@ function ContactsInner() {
           onCreated={() => void load(q)}
         />
       )}
+
+      {selected ? (
+        <CreateOpportunityModal
+          open={oppOpen}
+          onClose={() => setOppOpen(false)}
+          contactId={selected.id}
+          companyId={selected.company_id}
+          defaultName={
+            selected.company_name
+              ? `${selected.full_name} · ${selected.company_name}`
+              : `${selected.full_name} opportunity`
+          }
+          contextLabel={`From contact · ${selected.full_name}`}
+          onCreated={(id) => router.push(`/opportunities?open=${id}`)}
+        />
+      ) : null}
     </>
   );
 }

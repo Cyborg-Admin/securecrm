@@ -3,10 +3,15 @@ import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { getDbAsync } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
+import { DeleteBlockedError, deleteLead } from "@/lib/deletes";
 import { assignOwner } from "@/lib/leads";
 
 const patchSchema = z.object({
   fullName: z.string().min(1).max(200).optional(),
+  email: z.preprocess(
+    (v) => (typeof v === "string" && !v.trim() ? null : v),
+    z.string().email().max(320).optional().nullable(),
+  ),
   jobTitle: z.string().max(200).optional().nullable(),
   companyName: z.string().max(200).optional().nullable(),
   industry: z.string().max(200).optional().nullable(),
@@ -71,10 +76,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     });
   }
 
+  const emailPatch =
+    d.email === undefined
+      ? null
+      : d.email
+        ? String(d.email).trim().toLowerCase()
+        : null;
+
   await db
     .prepare(
       `UPDATE leads SET
        full_name = COALESCE(?, full_name),
+       email = CASE WHEN ? = 1 THEN ? ELSE email END,
        job_title = COALESCE(?, job_title),
        company_name = COALESCE(?, company_name),
        industry = COALESCE(?, industry),
@@ -88,6 +101,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     )
     .run(
       d.fullName ?? null,
+      d.email !== undefined ? 1 : 0,
+      emailPatch,
       d.jobTitle ?? null,
       d.companyName ?? null,
       d.industry ?? null,
@@ -113,4 +128,25 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   });
 
   return json({ lead });
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const user = await requireUser(req, "leads:delete");
+  if (isResponse(user)) return user;
+  const { id } = await ctx.params;
+
+  try {
+    await deleteLead({
+      organizationId: user.organization_id,
+      actorUserId: user.id,
+      leadId: id,
+    });
+    return json({ ok: true });
+  } catch (e) {
+    if (e instanceof DeleteBlockedError) return error(e.message, 400);
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return error("Lead not found", 404);
+    }
+    throw e;
+  }
 }

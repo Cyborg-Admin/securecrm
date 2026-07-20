@@ -113,38 +113,152 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
 
+  function absMediaUrl(src) {
+    if (!src || typeof src !== "string") return null;
+    const cleaned = src.trim().replace(/&amp;/g, "&");
+    if (!cleaned || cleaned.startsWith("data:")) return null;
+    try {
+      return new URL(cleaned, location.origin).href;
+    } catch {
+      return null;
+    }
+  }
+
+  function scrapeHeadshotUrl() {
+    const selectors = [
+      "img.pv-top-card-profile-picture__image",
+      "img.pv-top-card-profile-picture__image--show",
+      ".pv-top-card__non-self-photo-wrapper img",
+      ".pv-top-card--photo img",
+      'button img[class*="profile-picture"]',
+      'main img.evi-image[src*="profile"]',
+      'main img.evi-image[src*="shrink_"]',
+      ".presence-entity__image",
+    ];
+    for (const sel of selectors) {
+      const img = document.querySelector(sel);
+      const url = absMediaUrl(img?.src || img?.getAttribute("src"));
+      if (url && !/ghost|data:image\/gif|static\.licdn\.com\/aero-v1\/sc\/h\//i.test(url)) {
+        return url;
+      }
+    }
+    const og = document.querySelector('meta[property="og:image"]')?.content;
+    return absMediaUrl(og);
+  }
+
+  function scrapeCompanyLogoUrl(scope = document) {
+    const selectors = [
+      'a[data-field="experience_company_logo"] img',
+      "#experience ~ div img[src*='company']",
+      "#experience + div img",
+      'section[id*="experience" i] img.evi-image',
+      'a[href*="/company/"] img',
+      ".pvs-entity__image-container img",
+    ];
+    for (const sel of selectors) {
+      const img = scope.querySelector?.(sel) || document.querySelector(sel);
+      const url = absMediaUrl(img?.src || img?.getAttribute("src"));
+      if (url) return url;
+    }
+    return null;
+  }
+
+  function scrapeBio() {
+    const aboutRoot =
+      document.querySelector("#about")?.closest("section") ||
+      document.querySelector('section[id*="about" i]') ||
+      document.querySelector("#about ~ div") ||
+      document.querySelector('[data-section="summary"]');
+
+    if (aboutRoot && !SecureCRM.isOurUi?.(aboutRoot)) {
+      const spans = [
+        ...aboutRoot.querySelectorAll(
+          'span[aria-hidden="true"], .inline-show-more-text, .pv-about__summary-text, .full-width',
+        ),
+      ];
+      let best = "";
+      for (const el of spans) {
+        if (SecureCRM.isOurUi?.(el)) continue;
+        const t = SecureCRM.text(el);
+        if (
+          t &&
+          t.length > best.length &&
+          !/^about$/i.test(t) &&
+          !SecureCRM.isNoiseText?.(t)
+        ) {
+          best = t;
+        }
+      }
+      if (best.length > 40) return best.slice(0, 4000);
+    }
+
+    // Embedded JSON summary / about
+    const html = document.documentElement.innerHTML.slice(0, 900000);
+    const summary =
+      html.match(/"summary"\s*:\s*"((?:\\.|[^"\\]){40,})"/)?.[1] ||
+      html.match(/"about"\s*:\s*"((?:\\.|[^"\\]){40,})"/)?.[1];
+    if (summary) {
+      try {
+        return JSON.parse(`"${summary}"`).slice(0, 4000);
+      } catch {
+        return decodeHtml(summary).replace(/\\n/g, "\n").slice(0, 4000);
+      }
+    }
+    return null;
+  }
+
+  function scrapeProfileMedia() {
+    const photoUrl = scrapeHeadshotUrl();
+    const companyLogoUrl = scrapeCompanyLogoUrl();
+    const bio = scrapeBio();
+    return {
+      photoUrl: photoUrl || null,
+      companyLogoUrl: companyLogoUrl || null,
+      bio: bio || null,
+    };
+  }
+
+  function firstCleanText(selectors) {
+    for (const sel of selectors) {
+      for (const el of document.querySelectorAll(sel)) {
+        if (SecureCRM.isOurUi?.(el)) continue;
+        const value = SecureCRM.text(el);
+        if (value && !SecureCRM.isNoiseText?.(value)) return value;
+      }
+    }
+    return "";
+  }
+
   function scrapeProfileDom() {
     const slug = profileSlugFromUrl();
-    const h1 =
-      SecureCRM.text(document.querySelector("main h1")) ||
-      SecureCRM.text(document.querySelector("h1")) ||
-      SecureCRM.text(document.querySelector(".text-heading-xlarge"));
+    const h1 = firstCleanText([
+      "main h1",
+      "h1.text-heading-xlarge",
+      ".text-heading-xlarge",
+      "h1",
+    ]);
 
     const titleMeta =
       document.querySelector('meta[property="og:title"]')?.content ||
       document.title.replace(/\s*\|\s*LinkedIn.*$/i, "").trim();
 
     const fullName = h1 || titleMeta;
+    if (SecureCRM.isNoiseText?.(fullName)) return null;
+
     const headline =
-      SecureCRM.text(
-        document.querySelector("main .text-body-medium.break-words"),
-      ) ||
-      SecureCRM.text(document.querySelector(".text-body-medium.break-words")) ||
+      firstCleanText([
+        "main .text-body-medium.break-words",
+        ".pv-text-details__left-panel .text-body-medium",
+        ".text-body-medium.break-words",
+      ]) ||
       document.querySelector('meta[property="og:description"]')?.content ||
       "";
 
     const location =
-      SecureCRM.text(
-        document.querySelector(
-          "span.text-body-small.inline.t-black--light.break-words",
-        ),
-      ) ||
-      SecureCRM.text(
-        document.querySelector(
-          '.pv-text-details__left-panel .text-body-small:not(.inline)',
-        ),
-      ) ||
-      "";
+      firstCleanText([
+        "span.text-body-small.inline.t-black--light.break-words",
+        ".pv-text-details__left-panel .text-body-small:not(.inline)",
+      ]) || "";
 
     let companyName = null;
     let jobTitle = headline;
@@ -159,6 +273,7 @@
     }
 
     if (!fullName || !slug) return null;
+    const media = scrapeProfileMedia();
     return {
       linkedinUrl: SecureCRM.normalizeLinkedIn(location.href),
       fullName,
@@ -168,13 +283,27 @@
       website: null,
       location: location || null,
       headline: headline || null,
-      metadata: { page: "profile_dom" },
+      metadata: {
+        page: "profile_dom",
+        photoUrl: media.photoUrl,
+        companyLogoUrl: media.companyLogoUrl,
+        bio: media.bio,
+      },
     };
   }
 
-  function scrapeExperiences() {
+  function scrapeExperiences(trainedRootCss) {
     const experiences = [];
+    const trainedRoots = [];
+    if (trainedRootCss) {
+      try {
+        trainedRoots.push(...document.querySelectorAll(trainedRootCss));
+      } catch {
+        /* ignore bad recipe */
+      }
+    }
     const roots = [
+      ...trainedRoots,
       ...document.querySelectorAll("#experience ~ div, #experience + div"),
       ...document.querySelectorAll(
         'section[id*="experience" i], section[data-section="experience"]',
@@ -203,9 +332,11 @@
 
     let order = 0;
     for (const card of cards) {
+      if (SecureCRM.isOurUi?.(card)) continue;
       const text = SecureCRM.text(card).slice(0, 500);
       if (!text || text.length < 8) continue;
       if (/^see more|^show all/i.test(text)) continue;
+      if (SecureCRM.isNoiseText?.(text)) continue;
 
       const title =
         SecureCRM.text(
@@ -225,6 +356,14 @@
         ) ||
         SecureCRM.text(companyLink) ||
         null;
+
+      const logoImg =
+        card.querySelector('a[href*="/company/"] img') ||
+        card.querySelector(".pvs-entity__image-container img") ||
+        card.querySelector("img.evi-image");
+      const companyLogoUrl = absMediaUrl(
+        logoImg?.src || logoImg?.getAttribute("src"),
+      );
 
       const dateLine =
         SecureCRM.text(
@@ -251,6 +390,7 @@
         title,
         companyName,
         companyLinkedinUrl: companyLink?.href || null,
+        companyLogoUrl,
         location: null,
         startedOn,
         endedOn,
@@ -292,8 +432,17 @@
       headline: SecureCRMRecipe?.applyField?.(fields, "headline"),
     };
 
-    const experiences = scrapeExperiences();
+    const experiences = scrapeExperiences(fields?.experienceRoot?.css);
     const current = experiences.find((e) => e.isCurrent) || experiences[0];
+    const media = scrapeProfileMedia();
+    const photoUrl =
+      media.photoUrl || fromDom?.metadata?.photoUrl || null;
+    const companyLogoUrl =
+      media.companyLogoUrl ||
+      current?.companyLogoUrl ||
+      fromDom?.metadata?.companyLogoUrl ||
+      null;
+    const bio = media.bio || fromDom?.metadata?.bio || null;
 
     return {
       linkedinUrl:
@@ -323,10 +472,18 @@
       experiences,
       metadata: {
         page: "profile",
-        sources: [fromDom && "dom", fromCode && "code", experiences.length && "experience"].filter(
-          Boolean,
-        ),
+        sources: [
+          fromDom && "dom",
+          fromCode && "code",
+          experiences.length && "experience",
+          photoUrl && "photo",
+          companyLogoUrl && "logo",
+          bio && "bio",
+        ].filter(Boolean),
         recipeFields: Object.keys(fields),
+        photoUrl,
+        companyLogoUrl,
+        bio,
       },
     };
   }
@@ -357,28 +514,41 @@
         link.parentElement?.parentElement?.parentElement ||
         link.parentElement;
 
+      if (SecureCRM.isOurUi?.(link) || SecureCRM.isOurUi?.(card)) continue;
+
       const ariaName = SecureCRM.text(
         link.querySelector('span[aria-hidden="true"]'),
       );
-      const visibleName =
+      let visibleName =
         ariaName ||
         SecureCRM.text(link).replace(/View .+ profile/i, "").trim();
+      if (SecureCRM.isNoiseText?.(visibleName)) visibleName = "";
 
       const cardText = SecureCRM.text(card).slice(0, 400);
-      const lines = cardText
-        .split(/(?<=[.!?])\s+|\n|·/)
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const lines = SecureCRM.cleanLines?.(
+        cardText.split(/(?<=[.!?])\s+|\n|·/).map((s) => s.trim()),
+      ) ||
+        cardText
+          .split(/(?<=[.!?])\s+|\n|·/)
+          .map((s) => s.trim())
+          .filter(Boolean);
 
       let fullName = visibleName;
       if (!fullName || fullName.length < 2 || /linkedin|connect|follow/i.test(fullName)) {
-        fullName = lines.find((l) => l.length > 2 && l.length < 80 && !/^\d/.test(l)) || "";
+        fullName =
+          lines.find(
+            (l) =>
+              l.length > 2 &&
+              l.length < 80 &&
+              !/^\d/.test(l) &&
+              !SecureCRM.isNoiseText?.(l),
+          ) || "";
       }
       if (!fullName) {
         const slug = profileSlugFromUrl(linkedinUrl);
         fullName = slug ? slug.replace(/-/g, " ") : "";
       }
-      if (!fullName) continue;
+      if (!fullName || SecureCRM.isNoiseText?.(fullName)) continue;
 
       let jobTitle = null;
       let companyName = null;
@@ -387,6 +557,7 @@
         lines.find(
           (l) =>
             l !== fullName &&
+            !SecureCRM.isNoiseText?.(l) &&
             (l.includes(" at ") ||
               /engineer|manager|director|founder|officer|head|vp|sales|designer|consultant/i.test(
                 l,
@@ -400,12 +571,26 @@
         jobTitle = primary;
       }
 
-      const locLine = lines.find((l) => /,/.test(l) && l !== fullName && l !== primary);
+      const locLine = lines.find(
+        (l) =>
+          /,/.test(l) &&
+          l !== fullName &&
+          l !== primary &&
+          !SecureCRM.isNoiseText?.(l),
+      );
       if (locLine) location = locLine;
 
       // Prefer embedded code for this slug when available
       const slug = profileSlugFromUrl(linkedinUrl);
       const coded = slug ? scrapeFromEmbeddedCode(slug) : null;
+
+      const avatarImg =
+        card?.querySelector?.(
+          'img.presence-entity__image, img.evi-image, img.ivm-view-attr__img--centered, img[src*="profile"], img[src*="shrink"]',
+        ) || null;
+      const photoUrl = absMediaUrl(
+        avatarImg?.src || avatarImg?.getAttribute("src"),
+      );
 
       leads.push({
         linkedinUrl,
@@ -416,7 +601,11 @@
         website: null,
         location: coded?.location || location,
         headline: coded?.headline || primary || null,
-        metadata: { page: "search_links", slug },
+        metadata: {
+          page: "search_links",
+          slug,
+          ...(photoUrl ? { photoUrl } : {}),
+        },
       });
     }
 
@@ -643,8 +832,15 @@
           },
           {
             id: "train",
-            label: "Toggle train mode",
-            onClick: () => SecureCRMTrain?.toggle?.(),
+            label: "Train mode",
+            onClick: async () => {
+              const on = await SecureCRMTrain?.toggle?.();
+              SecureCRMPanel.setStatus(
+                on
+                  ? "Train mode on — click page text, then pick a field."
+                  : "Train mode off.",
+              );
+            },
           },
         ],
         { title: "KINETIC · LinkedIn profile" },
@@ -694,8 +890,15 @@
         },
         {
           id: "train",
-          label: "Toggle train mode",
-          onClick: () => SecureCRMTrain?.toggle?.(),
+          label: "Train mode",
+          onClick: async () => {
+            const on = await SecureCRMTrain?.toggle?.();
+            SecureCRMPanel.setStatus(
+              on
+                ? "Train mode on — click page text, then pick a field."
+                : "Train mode off.",
+            );
+          },
         },
         {
           id: "badges",

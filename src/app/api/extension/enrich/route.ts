@@ -7,6 +7,7 @@ const experienceSchema = z.object({
   title: z.string().max(300).optional().nullable(),
   companyName: z.string().max(300).optional().nullable(),
   companyLinkedinUrl: z.string().max(500).optional().nullable(),
+  companyLogoUrl: z.string().max(1000).optional().nullable(),
   location: z.string().max(300).optional().nullable(),
   startedOn: z.string().max(80).optional().nullable(),
   endedOn: z.string().max(80).optional().nullable(),

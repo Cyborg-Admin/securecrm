@@ -76,10 +76,11 @@ export async function matchPerson(input: {
         full_name: string;
         job_title: string | null;
         company_name: string | null;
-        linkedin_uid: string;
+        email: string | null;
+        linkedin_uid: string | null;
         owner_user_id: string | null;
       }>(
-        `SELECT id, full_name, job_title, company_name, linkedin_uid, owner_user_id
+        `SELECT id, full_name, job_title, company_name, email, linkedin_uid, owner_user_id
          FROM leads WHERE organization_id = ? AND linkedin_uid = ?`,
       )
       .get(input.organizationId, linkedinUid);
@@ -90,7 +91,7 @@ export async function matchPerson(input: {
         full_name: lead.full_name,
         job_title: lead.job_title,
         company_name: lead.company_name,
-        email: null,
+        email: lead.email,
         linkedin_uid: lead.linkedin_uid,
         owner_user_id: lead.owner_user_id,
         score: 95,
@@ -128,6 +129,35 @@ export async function matchPerson(input: {
         reasons: ["email_exact"],
       });
     }
+
+    const leadByEmail = await db
+      .prepare<{
+        id: string;
+        full_name: string;
+        job_title: string | null;
+        company_name: string | null;
+        email: string | null;
+        linkedin_uid: string | null;
+        owner_user_id: string | null;
+      }>(
+        `SELECT id, full_name, job_title, company_name, email, linkedin_uid, owner_user_id
+         FROM leads WHERE organization_id = ? AND lower(email) = ?`,
+      )
+      .get(input.organizationId, email);
+    if (leadByEmail) {
+      candidates.push({
+        entity_type: "lead",
+        id: leadByEmail.id,
+        full_name: leadByEmail.full_name,
+        job_title: leadByEmail.job_title,
+        company_name: leadByEmail.company_name,
+        email: leadByEmail.email,
+        linkedin_uid: leadByEmail.linkedin_uid,
+        owner_user_id: leadByEmail.owner_user_id,
+        score: 92,
+        reasons: ["email_exact"],
+      });
+    }
   }
 
   if (input.fullName?.trim()) {
@@ -138,10 +168,11 @@ export async function matchPerson(input: {
         full_name: string;
         job_title: string | null;
         company_name: string | null;
-        linkedin_uid: string;
+        email: string | null;
+        linkedin_uid: string | null;
         owner_user_id: string | null;
       }>(
-        `SELECT id, full_name, job_title, company_name, linkedin_uid, owner_user_id
+        `SELECT id, full_name, job_title, company_name, email, linkedin_uid, owner_user_id
          FROM leads
          WHERE organization_id = ?
            AND (full_name LIKE ? OR full_name LIKE ?)
@@ -167,7 +198,7 @@ export async function matchPerson(input: {
           full_name: lead.full_name,
           job_title: lead.job_title,
           company_name: lead.company_name,
-          email: null,
+          email: lead.email,
           linkedin_uid: lead.linkedin_uid,
           owner_user_id: lead.owner_user_id,
           score: Math.min(89, score),

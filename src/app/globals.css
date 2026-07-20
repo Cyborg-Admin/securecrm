@@ -154,9 +154,9 @@ textarea {
 
 .brand-type {
   font-family: var(--font-brand);
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-weight: 400;
 }
 
 .page-kicker {
@@ -242,21 +242,6 @@ textarea {
   flex: 1;
 }
 
-.shell-brand-glyph {
-  display: grid;
-  place-items: center;
-  width: 2.15rem;
-  height: 2.15rem;
-  flex-shrink: 0;
-  line-height: 0;
-}
-
-.shell-brand-glyph svg {
-  display: block;
-  width: 2.15rem;
-  height: 2.15rem;
-}
-
 .shell-brand-text {
   min-width: 0;
   display: flex;
@@ -265,10 +250,10 @@ textarea {
 
 .shell-brand-name {
   font-family: var(--font-brand);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   color: var(--accent-deep);
   line-height: 1.2;
 }
@@ -403,7 +388,7 @@ textarea {
   color: var(--muted);
 }
 
-.app-shell.is-collapsed .shell-brand-text,
+.app-shell.is-collapsed .shell-brand-org,
 .app-shell.is-collapsed .shell-nav-label,
 .app-shell.is-collapsed .shell-nav-link-text,
 .app-shell.is-collapsed .shell-user-meta {
@@ -413,12 +398,18 @@ textarea {
 .app-shell.is-collapsed .shell-brand {
   flex-direction: column;
   justify-content: center;
-  padding-inline: 0.4rem;
+  padding-inline: 0.35rem;
   gap: 0.35rem;
 }
 
 .app-shell.is-collapsed .shell-brand-mark {
   justify-content: center;
+}
+
+.app-shell.is-collapsed .shell-brand-name {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-align: center;
 }
 
 .app-shell.is-collapsed .shell-nav-link {
@@ -874,6 +865,170 @@ textarea {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.85rem;
+}
+
+.record-pipeline {
+  margin-top: 0.9rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.pipeline-stepper {
+  width: 100%;
+}
+
+.pipeline-track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.pipeline-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 0;
+  min-width: 4.5rem;
+}
+
+.pipeline-connector {
+  position: absolute;
+  left: 0;
+  top: 0.95rem;
+  width: 50%;
+  height: 2px;
+  background: var(--line);
+  z-index: 0;
+}
+
+.pipeline-step.is-done .pipeline-connector,
+.pipeline-step.is-active .pipeline-connector {
+  background: var(--accent);
+}
+
+.pipeline-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0 0.15rem;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.pipeline-node:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.pipeline-dot {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  background: var(--surface-2, #eef3f0);
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.pipeline-step.is-done .pipeline-dot,
+.pipeline-step.is-active .pipeline-dot {
+  background: var(--accent);
+  border-color: var(--accent-deep);
+  color: #fff;
+}
+
+.pipeline-step.is-won.is-active .pipeline-dot {
+  background: var(--accent-deep);
+}
+
+.pipeline-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+  color: var(--muted);
+  max-width: 5.5rem;
+}
+
+.pipeline-step.is-active .pipeline-label {
+  color: var(--accent-deep);
+}
+
+.pipeline-step.is-done .pipeline-label {
+  color: var(--ink);
+}
+
+.pipeline-lost-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+
+.pipeline-lost {
+  border: 1px solid var(--line);
+  background: var(--surface-2, #eef3f0);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pipeline-lost.is-active {
+  border-color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
+  color: #9a3412;
+}
+
+.pipeline-mini {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 7rem;
+}
+
+.pipeline-mini-track {
+  flex: 1;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.pipeline-mini-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.pipeline-mini-fill.is-lost {
+  background: #b45309;
+}
+
+.pipeline-mini-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .record-chip {

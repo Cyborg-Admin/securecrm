@@ -14,7 +14,8 @@ export async function GET() {
   }
 
   try {
-    const bytes = zipDirectory(extDir);
+    // Store-ready zip: strips manifest `key` so Chrome Web Store can assign the public ID.
+    const bytes = zipDirectory(extDir, { forChromeWebStore: true });
     return new NextResponse(new Uint8Array(bytes), {
       status: 200,
       headers: {

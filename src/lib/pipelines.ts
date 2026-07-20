@@ -1,7 +1,18 @@
 import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
 
-export type PipelineKey = "opportunity" | "event_sales" | "event_delegate";
+export type PipelineKey =
+  | "lead"
+  | "opportunity"
+  | "event_sales"
+  | "event_delegate";
+
+export const PIPELINE_KEYS: PipelineKey[] = [
+  "lead",
+  "opportunity",
+  "event_sales",
+  "event_delegate",
+];
 
 export type StageRow = {
   id: string;
@@ -17,8 +28,23 @@ export type StageRow = {
 
 const DEFAULTS: Record<
   PipelineKey,
-  Array<{ name: string; probability: number; isWon?: boolean; isLost?: boolean; requiresApproval?: boolean }>
+  Array<{
+    name: string;
+    probability: number;
+    isWon?: boolean;
+    isLost?: boolean;
+    requiresApproval?: boolean;
+  }>
 > = {
+  lead: [
+    { name: "New", probability: 10 },
+    { name: "Contacted", probability: 25 },
+    { name: "Qualified", probability: 45 },
+    { name: "Meeting", probability: 65 },
+    { name: "Proposal", probability: 80 },
+    { name: "Converted", probability: 100, isWon: true },
+    { name: "Disqualified", probability: 0, isLost: true },
+  ],
   opportunity: [
     { name: "Prospecting", probability: 10 },
     { name: "Qualification", probability: 25 },
@@ -42,6 +68,15 @@ const DEFAULTS: Record<
     { name: "Cancelled", probability: 0, isLost: true },
   ],
 };
+
+/** Normalize a stage name to the value stored on leads.status. */
+export function stageStatusKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
 
 export async function ensureDefaultStages(organizationId: string): Promise<void> {
   const db = await getDbAsync();

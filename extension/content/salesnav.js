@@ -11,6 +11,40 @@
     return /\/sales\/search/i.test(location.href) || /\/sales\/lists/i.test(location.href);
   }
 
+  function absMediaUrl(src) {
+    if (!src || typeof src !== "string") return null;
+    const cleaned = src.trim().replace(/&amp;/g, "&");
+    if (!cleaned || cleaned.startsWith("data:")) return null;
+    try {
+      return new URL(cleaned, location.origin).href;
+    } catch {
+      return null;
+    }
+  }
+
+  function scrapeProfileMedia() {
+    const photoEl =
+      document.querySelector('[data-anonymize="headshot"] img') ||
+      document.querySelector(".profile-topcard-person-entity__image img") ||
+      document.querySelector(".pv-top-card-profile-picture__image") ||
+      document.querySelector('img[alt*="profile" i]');
+    const logoEl =
+      document.querySelector('[data-anonymize="company-logo"] img') ||
+      document.querySelector(".profile-topcard__summary-position img") ||
+      document.querySelector('a[data-anonymize="company-name"] img');
+    const bio =
+      SecureCRM.text(document.querySelector('[data-anonymize="person-blurb"]')) ||
+      SecureCRM.text(document.querySelector(".profile-topcard__summary-content")) ||
+      SecureCRM.text(document.querySelector("#about ~ div")) ||
+      null;
+
+    return {
+      photoUrl: absMediaUrl(photoEl?.src || photoEl?.getAttribute("src")),
+      companyLogoUrl: absMediaUrl(logoEl?.src || logoEl?.getAttribute("src")),
+      bio: bio && bio.length > 20 ? bio.slice(0, 4000) : null,
+    };
+  }
+
   function scrapeProfile() {
     const name =
       SecureCRM.text(document.querySelector('[data-anonymize="person-name"]')) ||
@@ -34,6 +68,8 @@
     linkedinUrl = SecureCRM.normalizeLinkedIn(linkedinUrl);
 
     if (!name || !linkedinUrl) return null;
+    if (SecureCRM.isNoiseText?.(name)) return null;
+    const media = scrapeProfileMedia();
     return {
       linkedinUrl,
       fullName: name,
@@ -43,7 +79,12 @@
       website: null,
       location: location || null,
       headline: jobTitle || null,
-      metadata: { page: "salesnav_profile" },
+      metadata: {
+        page: "salesnav_profile",
+        photoUrl: media.photoUrl,
+        companyLogoUrl: media.companyLogoUrl,
+        bio: media.bio,
+      },
     };
   }
 
@@ -67,10 +108,11 @@
       if (!linkedinUrl || seen.has(linkedinUrl)) continue;
       seen.add(linkedinUrl);
 
+      if (SecureCRM.isOurUi?.(row) || SecureCRM.isOurUi?.(link)) continue;
       const fullName =
         SecureCRM.text(row.querySelector('[data-anonymize="person-name"]')) ||
         SecureCRM.text(link);
-      if (!fullName) continue;
+      if (!fullName || SecureCRM.isNoiseText?.(fullName)) continue;
 
       const jobTitle =
         SecureCRM.text(row.querySelector('[data-anonymize="title"]')) ||
@@ -212,6 +254,18 @@
               }
             },
           },
+          {
+            id: "train",
+            label: "Train mode",
+            onClick: async () => {
+              const on = await SecureCRMTrain?.toggle?.();
+              SecureCRMPanel.setStatus(
+                on
+                  ? "Train mode on — click page text, then pick a field."
+                  : "Train mode off.",
+              );
+            },
+          },
         ],
         { title: "KINETIC · Sales Nav" },
       );
@@ -265,6 +319,7 @@
   }
 
   mount();
+  SecureCRMBadges?.start?.();
   new MutationObserver(() => {
     if (!document.getElementById("scrm-fab-root")) mount();
   }).observe(document.documentElement, {

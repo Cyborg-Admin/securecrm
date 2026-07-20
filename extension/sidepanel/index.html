@@ -15,7 +15,6 @@
   <body>
     <header class="head">
       <div class="brand-row">
-        <img src="../icons/kinetic-emblem.svg" width="36" height="36" alt="" />
         <div>
           <h1>Kinetic</h1>
           <p class="sub">Pinned workspace · v<span id="localVersion">—</span></p>
@@ -29,9 +28,14 @@
         Update available: <strong id="remoteVersion"></strong>
       </p>
       <p id="releaseNotes" class="muted"></p>
-      <a id="downloadUpdate" href="#" target="_blank" rel="noreferrer">Download zip</a>
-      <p class="muted tiny">
-        Unzip → chrome://extensions → Reload unpacked (or Load unpacked).
+      <div class="row">
+        <button type="button" id="applyUpdate" class="primary">Update now</button>
+        <a id="downloadUpdate" class="ghost-link" href="#" target="_blank" rel="noreferrer"
+          >Manual zip</a
+        >
+      </div>
+      <p id="autoUpdateHint" class="muted tiny">
+        One-time: link your unpacked extension folder, then updates apply automatically.
       </p>
     </div>
 
@@ -84,14 +88,27 @@
     </section>
 
     <section id="tab-settings" class="panel">
+      <h2 class="section-title" style="margin-top:0">Account</h2>
       <label class="field">
         CRM base URL
         <input id="apiBase" type="url" placeholder="https://crm.cyborgwales.com" />
       </label>
-      <label class="field">
-        API key
-        <input id="apiKey" type="password" placeholder="scrm_…" autocomplete="off" />
-      </label>
+      <div id="accountSignedIn" hidden>
+        <p id="accountSummary" class="muted"></p>
+        <button type="button" id="signOut" class="ghost">Sign out</button>
+      </div>
+      <div id="accountSignedOut">
+        <label class="field">
+          Work email
+          <input id="loginEmail" type="email" autocomplete="username" placeholder="you@company.com" />
+        </label>
+        <label class="field">
+          Password
+          <input id="loginPassword" type="password" autocomplete="current-password" />
+        </label>
+        <button type="button" id="signIn" class="primary">Sign in</button>
+        <p id="authStatus" class="muted"></p>
+      </div>
 
       <h2 class="section-title">Scanning</h2>
       <label class="check">
@@ -123,12 +140,26 @@
         <input id="compactCrmLimit" type="number" min="5" max="50" />
       </label>
 
+      <h2 class="section-title">Automatic updates</h2>
+      <p id="autoUpdateStatus" class="muted">Checking…</p>
+      <div class="row">
+        <button type="button" id="linkAutoUpdate" class="primary">
+          Enable auto-updates
+        </button>
+        <button type="button" id="unlinkAutoUpdate" class="ghost">Disable</button>
+      </div>
+      <p class="muted tiny">
+        Links the folder you loaded in chrome://extensions. New versions sync from the CRM and
+        reload the extension — no zip.
+      </p>
+
       <button type="button" id="saveSettings" class="primary">Save settings</button>
       <p id="settingsStatus" class="muted"></p>
     </section>
 
     <script src="../shared/crm-api.js"></script>
     <script src="../shared/history.js"></script>
+    <script src="../shared/auto-update.js"></script>
     <script src="sidepanel.js"></script>
   </body>
 </html>

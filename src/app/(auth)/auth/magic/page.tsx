@@ -41,7 +41,9 @@ function MagicConsumeInner() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="neo-raised w-full max-w-md p-8 text-center">
-        <p className="brand-type text-xl text-[var(--accent-deep)]">Kinetic</p>
+        <p className="brand-type text-2xl font-bold text-[var(--accent-deep)]">
+          Kinetic
+        </p>
         {error ? (
           <>
             <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>

@@ -17,8 +17,15 @@ const schema = z.object({
       subject: z.string().max(500).optional().nullable(),
       fromEmail: z.string().max(320).optional().nullable(),
       fromName: z.string().max(200).optional().nullable(),
+      toEmails: z.array(z.string().max(320)).max(20).optional(),
+      ccEmails: z.array(z.string().max(320)).max(20).optional(),
       sourceUrl: z.string().max(2000).optional().nullable(),
       snippet: z.string().max(2000).optional().nullable(),
+      bodyText: z.string().max(8000).optional().nullable(),
+      externalThreadId: z.string().max(200).optional().nullable(),
+      externalMessageId: z.string().max(200).optional().nullable(),
+      sentAt: z.string().max(80).optional().nullable(),
+      direction: z.enum(["inbound", "outbound", "unknown"]).optional(),
     })
     .optional(),
 });
@@ -64,8 +71,15 @@ export async function POST(req: NextRequest) {
         subject: ctx.subject,
         fromEmail: ctx.fromEmail || parsed.data.email,
         fromName: ctx.fromName || parsed.data.fullName,
+        toEmails: ctx.toEmails,
+        ccEmails: ctx.ccEmails,
         sourceUrl: ctx.sourceUrl,
         snippet: ctx.snippet,
+        bodyText: ctx.bodyText,
+        externalThreadId: ctx.externalThreadId,
+        externalMessageId: ctx.externalMessageId,
+        sentAt: ctx.sentAt,
+        direction: ctx.direction,
       },
     });
     activityLogged = result.created || result.leadCreated;

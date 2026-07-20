@@ -3,6 +3,7 @@ import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { getDbAsync } from "@/lib/db";
+import { DeleteBlockedError, deleteOpportunity } from "@/lib/deletes";
 import { createNotification } from "@/lib/notifications";
 import { assertFeatureEnabled, getOrganization } from "@/lib/org";
 
@@ -167,4 +168,25 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .prepare(`SELECT * FROM opportunities WHERE id = ?`)
     .get(id);
   return json({ opportunity });
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const user = await requireUser(req, "opportunities:delete");
+  if (isResponse(user)) return user;
+  const { id } = await ctx.params;
+
+  try {
+    await deleteOpportunity({
+      organizationId: user.organization_id,
+      actorUserId: user.id,
+      opportunityId: id,
+    });
+    return json({ ok: true });
+  } catch (e) {
+    if (e instanceof DeleteBlockedError) return error(e.message, 400);
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return error("Opportunity not found", 404);
+    }
+    throw e;
+  }
 }

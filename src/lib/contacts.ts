@@ -101,14 +101,15 @@ export async function convertLeadToContact(input: {
     .prepare<{
       id: string;
       organization_id: string;
-      linkedin_uid: string;
+      linkedin_uid: string | null;
+      email: string | null;
       full_name: string;
       job_title: string | null;
       company_id: string | null;
       owner_user_id: string | null;
       status: string;
     }>(
-      `SELECT id, organization_id, linkedin_uid, full_name, job_title,
+      `SELECT id, organization_id, linkedin_uid, email, full_name, job_title,
               company_id, owner_user_id, status
        FROM leads WHERE id = ? AND organization_id = ?`,
     )
@@ -116,12 +117,34 @@ export async function convertLeadToContact(input: {
 
   if (!lead) throw new Error("NOT_FOUND:lead");
 
-  const existing = await db
+  let existing = await db
     .prepare<ContactRow>(
       `SELECT * FROM contacts
-       WHERE organization_id = ? AND (lead_id = ? OR linkedin_uid = ?)`,
+       WHERE organization_id = ? AND lead_id = ?`,
     )
-    .get(input.organizationId, lead.id, lead.linkedin_uid);
+    .get(input.organizationId, lead.id);
+
+  if (!existing && lead.linkedin_uid) {
+    existing = await db
+      .prepare<ContactRow>(
+        `SELECT * FROM contacts
+         WHERE organization_id = ? AND linkedin_uid = ?`,
+      )
+      .get(input.organizationId, lead.linkedin_uid);
+  }
+  if (!existing && (input.email || lead.email)) {
+    const email = String(input.email || lead.email)
+      .trim()
+      .toLowerCase();
+    existing = await db
+      .prepare<ContactRow>(
+        `SELECT * FROM contacts
+         WHERE organization_id = ? AND lower(email) = ?`,
+      )
+      .get(input.organizationId, email);
+  }
+
+  const contactEmail = input.email ?? lead.email ?? null;
 
   if (existing) {
     await db
@@ -133,7 +156,7 @@ export async function convertLeadToContact(input: {
          updated_at = datetime('now')
        WHERE id = ?`,
       )
-      .run(lead.id, input.email ?? null, input.phone ?? null, existing.id);
+      .run(lead.id, contactEmail, input.phone ?? null, existing.id);
 
     await db
       .prepare(
@@ -148,9 +171,11 @@ export async function convertLeadToContact(input: {
     return { contact, created: false };
   }
 
-  const linkedinUrl = lead.linkedin_uid.startsWith("http")
-    ? lead.linkedin_uid
-    : `https://www.${lead.linkedin_uid.replace(/^www\./, "")}`;
+  const linkedinUrl = lead.linkedin_uid
+    ? lead.linkedin_uid.startsWith("http")
+      ? lead.linkedin_uid
+      : `https://www.${lead.linkedin_uid.replace(/^www\./, "")}`
+    : null;
 
   const contact = await createContact({
     organizationId: input.organizationId,
@@ -158,7 +183,7 @@ export async function convertLeadToContact(input: {
     fullName: lead.full_name,
     linkedinUrl,
     jobTitle: lead.job_title,
-    email: input.email,
+    email: contactEmail,
     phone: input.phone,
     companyId: lead.company_id,
     leadId: lead.id,

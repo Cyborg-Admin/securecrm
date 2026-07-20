@@ -40,8 +40,8 @@ body {
 h1 {
   margin: 0;
   font-family: "Michroma", sans-serif;
-  font-size: 0.95rem;
-  font-weight: 400;
+  font-size: 1.05rem;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent);
@@ -133,6 +133,7 @@ textarea {
 
 .primary,
 .ghost,
+.ghost-link,
 a#downloadUpdate {
   border-radius: 8px;
   padding: 9px 12px;
@@ -150,9 +151,22 @@ a#downloadUpdate {
   margin-top: 8px;
 }
 
-.ghost {
+.row .primary,
+.banner .primary {
+  width: auto;
+  margin-top: 0;
+}
+
+.ghost,
+.ghost-link {
   background: transparent;
   color: var(--ink);
+}
+
+.ghost-link {
+  border-color: var(--line);
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .list {

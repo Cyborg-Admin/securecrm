@@ -1,7 +1,8 @@
 (() => {
   const FIELDS = [
     { key: "fullName", label: "Full name", required: true },
-    { key: "linkedinUrl", label: "LinkedIn URL", required: true },
+    { key: "email", label: "Email", required: false },
+    { key: "linkedinUrl", label: "LinkedIn URL", required: false },
     { key: "jobTitle", label: "Job title", required: false },
     { key: "companyName", label: "Company", required: false },
     { key: "industry", label: "Industry", required: false },
@@ -21,6 +22,11 @@
         soft.push(f.key);
       }
     }
+    const hasIdentity =
+      (lead?.linkedinUrl && String(lead.linkedinUrl).trim()) ||
+      (lead?.email && String(lead.email).trim()) ||
+      (lead?.metadata?.gmail_email && String(lead.metadata.gmail_email).trim());
+    if (!hasIdentity) hard.push("email/linkedin");
     return { hard, soft };
   }
 
@@ -107,11 +113,17 @@
           const input = form.querySelector(`[name="${f.key}"]`);
           data[f.key] = input?.value?.trim() || null;
         }
-        if (!data.fullName || !data.linkedinUrl) {
-          hint.textContent = "Full name and LinkedIn URL are required.";
+        if (!data.fullName) {
+          hint.textContent = "Full name is required.";
           return;
         }
-        data.linkedinUrl = SecureCRM.normalizeLinkedIn(data.linkedinUrl);
+        if (!data.linkedinUrl && !data.email) {
+          hint.textContent = "Email or LinkedIn URL is required.";
+          return;
+        }
+        if (data.linkedinUrl) {
+          data.linkedinUrl = SecureCRM.normalizeLinkedIn(data.linkedinUrl);
+        }
         cleanup(data);
       };
     });

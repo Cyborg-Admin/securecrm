@@ -54,11 +54,12 @@ export async function POST(req: NextRequest) {
       createHash("sha256").update(plain).digest("hex"),
       prefix,
       JSON.stringify([
-        "extension:capture",
-        "extension:match",
-        "leads:write",
         "leads:read",
-        "settings:manage",
+        "leads:write",
+        "contacts:read",
+        "contacts:write",
+        "companies:read",
+        "companies:write",
       ]),
     );
 

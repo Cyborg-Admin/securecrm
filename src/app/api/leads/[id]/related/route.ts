@@ -34,10 +34,10 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   const contact = await db
     .prepare(
-      `SELECT id, full_name, email, phone, job_title, linkedin_uid
+      `SELECT id, full_name, email, phone, job_title, linkedin_uid, company_id
        FROM contacts
        WHERE organization_id = ?
-         AND (lead_id = ? OR linkedin_uid = ?)
+         AND (lead_id = ? OR (linkedin_uid IS NOT NULL AND linkedin_uid = ?))
        LIMIT 1`,
     )
     .get(user.organization_id, lead.id, lead.linkedin_uid);

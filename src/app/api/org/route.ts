@@ -36,6 +36,8 @@ const patchSchema = z.object({
     .object({
       timezone: z.string().max(80).optional(),
       currency: z.string().max(8).optional(),
+      chromeExtensionStoreUrl: z.string().max(500).optional(),
+      chromeExtensionId: z.string().max(64).optional(),
       opportunityApproval: z
         .object({
           enabled: z.boolean().optional(),

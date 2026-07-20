@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client-api";
-import { KineticEmblem } from "@/components/KineticEmblem";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import { QuickFab } from "@/components/QuickFab";
 
@@ -37,7 +36,8 @@ type NavItem = {
     | "event"
     | "bolt"
     | "team"
-    | "gear";
+    | "gear"
+    | "extension";
 };
 
 type NavGroup = { id: string; label: string; items: NavItem[] };
@@ -124,6 +124,13 @@ const NAV_GROUPS: NavGroup[] = [
         icon: "team",
       },
       {
+        href: "/extension",
+        label: "Extension",
+        perm: "extension:capture",
+        feature: "extension",
+        icon: "extension",
+      },
+      {
         href: "/settings",
         label: "Settings",
         perm: "settings:manage",
@@ -150,6 +157,10 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   },
   "/automations": { title: "Automations", subtitle: "Rules that keep work moving" },
   "/team": { title: "Team", subtitle: "People and access" },
+  "/extension": {
+    title: "Extension",
+    subtitle: "Install KINETIC in Chrome",
+  },
   "/settings": { title: "Settings", subtitle: "Workspace administration" },
   "/profile": { title: "Profile", subtitle: "Your account and security" },
 };
@@ -269,10 +280,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="shell-nav" aria-label="Primary">
         <div className="shell-nav-inner">
           <div className="shell-brand">
-            <Link href="/dashboard" className="shell-brand-mark" title="KINETIC">
-              <span className="shell-brand-glyph">
-                <KineticEmblem size={34} />
-              </span>
+            <Link href="/dashboard" className="shell-brand-mark" title="Kinetic">
               <span className="shell-brand-text">
                 <span className="shell-brand-name">Kinetic</span>
                 <span className="shell-brand-org">{me.organization.name}</span>
@@ -513,6 +521,17 @@ function NavIcon({ name }: { name: NavItem["icon"] }) {
             stroke="currentColor"
             strokeWidth="1.7"
             strokeLinecap="round"
+          />
+        </svg>
+      );
+    case "extension":
+      return (
+        <svg {...common}>
+          <path
+            d="M8 4v2.5M16 4v2.5M6.5 8.5h11A1.5 1.5 0 0 1 19 10v3.2a2.8 2.8 0 0 0-2.2 2.7V18a2 2 0 0 1-2 2h-5.6a2 2 0 0 1-2-2v-2.1A2.8 2.8 0 0 0 5 13.2V10a1.5 1.5 0 0 1 1.5-1.5Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
           />
         </svg>
       );

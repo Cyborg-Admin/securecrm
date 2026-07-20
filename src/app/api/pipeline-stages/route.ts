@@ -4,7 +4,12 @@ import { error, isResponse, json, requireUser } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { getDbAsync } from "@/lib/db";
 import { newId } from "@/lib/ids";
-import { ensureDefaultStages, listStages, type PipelineKey } from "@/lib/pipelines";
+import {
+  ensureDefaultStages,
+  listStages,
+  PIPELINE_KEYS,
+  type PipelineKey,
+} from "@/lib/pipelines";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser(req);
@@ -14,15 +19,13 @@ export async function GET(req: NextRequest) {
   const key = req.nextUrl.searchParams.get("pipeline") as PipelineKey | null;
   const stages = await listStages(
     user.organization_id,
-    key && ["opportunity", "event_sales", "event_delegate"].includes(key)
-      ? key
-      : undefined,
+    key && PIPELINE_KEYS.includes(key) ? key : undefined,
   );
   return json({ stages });
 }
 
 const createSchema = z.object({
-  pipelineKey: z.enum(["opportunity", "event_sales", "event_delegate"]),
+  pipelineKey: z.enum(["lead", "opportunity", "event_sales", "event_delegate"]),
   name: z.string().min(1).max(80),
   sortOrder: z.number().int().min(0).max(999).optional(),
   probability: z.number().int().min(0).max(100).default(0),

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { api } from "@/lib/client-api";
 
 type Product = {
@@ -273,6 +274,21 @@ export default function ProductsPage() {
               <button className="neo-btn neo-btn-primary w-full" type="submit">
                 Save product
               </button>
+              <div className="mt-4">
+                <DeleteRecordButton
+                  label="Delete product"
+                  hint="Blocked if used on opportunity line items — deactivate instead."
+                  onDelete={async () => {
+                    await api(`/api/products/${selected.id}`, {
+                      method: "DELETE",
+                    });
+                    setProducts((prev) =>
+                      prev.filter((p) => p.id !== selected.id),
+                    );
+                    setSelected(null);
+                  }}
+                />
+              </div>
             </form>
           ) : (
             <p className="text-[var(--neo-muted)]">Select a product to edit.</p>

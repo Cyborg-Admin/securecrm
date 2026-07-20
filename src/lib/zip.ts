@@ -27,15 +27,21 @@ function u32(n: number) {
 
 type ZipEntry = { name: string; data: Buffer };
 
-function walkFiles(dir: string, base = ""): ZipEntry[] {
+function walkFiles(
+  dir: string,
+  base = "",
+  opts?: { skipDirs?: Set<string> },
+): ZipEntry[] {
   const out: ZipEntry[] = [];
+  const skipDirs = opts?.skipDirs || new Set<string>();
   for (const name of fs.readdirSync(dir)) {
     if (name === ".DS_Store" || name === "node_modules") continue;
+    if (skipDirs.has(name)) continue;
     const full = path.join(dir, name);
     const rel = base ? `${base}/${name}` : name;
     const stat = fs.statSync(full);
     if (stat.isDirectory()) {
-      out.push(...walkFiles(full, rel));
+      out.push(...walkFiles(full, rel, opts));
     } else {
       out.push({ name: rel.replace(/\\/g, "/"), data: fs.readFileSync(full) });
     }
@@ -43,8 +49,36 @@ function walkFiles(dir: string, base = ""): ZipEntry[] {
   return out;
 }
 
-export function zipDirectory(dir: string): Buffer {
-  const files = walkFiles(dir);
+export function zipDirectory(
+  dir: string,
+  options?: { forChromeWebStore?: boolean },
+): Buffer {
+  const files = walkFiles(dir, "", {
+    skipDirs: options?.forChromeWebStore
+      ? new Set(["keys"])
+      : new Set<string>(),
+  }).map((file) => {
+    if (
+      options?.forChromeWebStore &&
+      file.name === "manifest.json"
+    ) {
+      try {
+        const manifest = JSON.parse(file.data.toString("utf8")) as Record<
+          string,
+          unknown
+        >;
+        // Web Store assigns its own ID — local `key` must not be uploaded.
+        delete manifest.key;
+        return {
+          ...file,
+          data: Buffer.from(JSON.stringify(manifest, null, 2), "utf8"),
+        };
+      } catch {
+        return file;
+      }
+    }
+    return file;
+  });
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;

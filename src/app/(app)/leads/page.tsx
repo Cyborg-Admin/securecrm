@@ -4,12 +4,17 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LeadRecordDrawer, type Lead } from "@/components/LeadRecordDrawer";
+import {
+  PipelineMiniBar,
+  type PipelineStage,
+} from "@/components/PipelineStepper";
 import { QuickCreateModal } from "@/components/QuickCreateModal";
 import { api } from "@/lib/client-api";
 
 function LeadsInner() {
   const search = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [pipelineStages, setPipelineStages] = useState<PipelineStage[]>([]);
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Lead | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -44,6 +49,9 @@ function LeadsInner() {
 
   useEffect(() => {
     void load("");
+    void api<{ stages: PipelineStage[] }>("/api/pipeline-stages?pipeline=lead")
+      .then((res) => setPipelineStages(res.stages || []))
+      .catch(() => setPipelineStages([]));
   }, []);
 
   useEffect(() => {
@@ -57,8 +65,8 @@ function LeadsInner() {
         <div>
           <h1 className="display text-3xl">Leads</h1>
           <p className="mt-1 text-[var(--neo-muted)]">
-            Capture stage. Open a record for fields, related, roles, and
-            activity.
+            Move leads through the pipeline. Open a record to progress stages,
+            related data, roles, and activity.
           </p>
         </div>
         <button
@@ -96,7 +104,14 @@ function LeadsInner() {
                         .join(" · ")}
                     </p>
                   </div>
-                  <span className="record-chip shrink-0">{lead.status}</span>
+                  {pipelineStages.length ? (
+                    <PipelineMiniBar
+                      stages={pipelineStages}
+                      currentStatus={lead.status}
+                    />
+                  ) : (
+                    <span className="record-chip shrink-0">{lead.status}</span>
+                  )}
                 </div>
                 <p className="mt-1 text-xs text-[var(--neo-muted)]">
                   {lead.source} · {lead.owner_name || "Unassigned"}
@@ -121,6 +136,10 @@ function LeadsInner() {
           setLeads((prev) =>
             prev.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)),
           );
+        }}
+        onLeadDeleted={(id) => {
+          setLeads((prev) => prev.filter((l) => l.id !== id));
+          setSelected(null);
         }}
       />
 

@@ -40,11 +40,11 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         menu.hidden = true;
-        try {
-          action.onClick?.();
-        } catch (err) {
-          SecureCRMPanel?.setStatus?.(err.message || "Action failed");
-        }
+        Promise.resolve()
+          .then(() => action.onClick?.())
+          .catch((err) => {
+            SecureCRMPanel?.setStatus?.(err?.message || "Action failed");
+          });
       });
       menu.appendChild(btn);
     }

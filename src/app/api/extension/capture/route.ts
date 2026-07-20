@@ -9,6 +9,7 @@ const experienceSchema = z.object({
   title: z.string().max(300).optional().nullable(),
   companyName: z.string().max(300).optional().nullable(),
   companyLinkedinUrl: z.string().max(500).optional().nullable(),
+  companyLogoUrl: z.string().max(1000).optional().nullable(),
   location: z.string().max(300).optional().nullable(),
   startedOn: z.string().max(80).optional().nullable(),
   endedOn: z.string().max(80).optional().nullable(),
@@ -17,18 +18,31 @@ const experienceSchema = z.object({
   sortOrder: z.number().int().min(0).max(200).optional(),
 });
 
-const leadSchema = z.object({
-  linkedinUrl: z.string().min(5).max(500),
-  fullName: z.string().min(1).max(200),
-  jobTitle: z.string().max(200).optional().nullable(),
-  companyName: z.string().max(200).optional().nullable(),
-  industry: z.string().max(200).optional().nullable(),
-  website: z.string().max(300).optional().nullable(),
-  location: z.string().max(200).optional().nullable(),
-  headline: z.string().max(500).optional().nullable(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  experiences: z.array(experienceSchema).max(50).optional(),
-});
+const leadSchema = z
+  .object({
+    linkedinUrl: z
+      .preprocess(
+        (v) => (typeof v === "string" && !v.trim() ? null : v),
+        z.string().min(5).max(500).optional().nullable(),
+      ),
+    email: z.preprocess(
+      (v) => (typeof v === "string" && !v.trim() ? null : v),
+      z.string().email().max(320).optional().nullable(),
+    ),
+    fullName: z.string().min(1).max(200),
+    jobTitle: z.string().max(200).optional().nullable(),
+    companyName: z.string().max(200).optional().nullable(),
+    industry: z.string().max(200).optional().nullable(),
+    website: z.string().max(300).optional().nullable(),
+    location: z.string().max(200).optional().nullable(),
+    headline: z.string().max(500).optional().nullable(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    experiences: z.array(experienceSchema).max(50).optional(),
+  })
+  .refine(
+    (l) => Boolean(l.linkedinUrl) || Boolean(l.email) || Boolean(l.metadata?.gmail_email),
+    { message: "linkedinUrl or email required" },
+  );
 
 const schema = z.object({
   source: z.enum(["linkedin", "salesnav", "cognism", "gmail"]),
@@ -90,7 +104,8 @@ export async function POST(req: NextRequest) {
   }
 
   const results: Array<{
-    linkedinUrl: string;
+    linkedinUrl: string | null;
+    email: string | null;
     created: boolean;
     leadId: string;
   }> = [];
@@ -110,7 +125,8 @@ export async function POST(req: NextRequest) {
       if (out.created) created += 1;
       else updated += 1;
       results.push({
-        linkedinUrl: lead.linkedinUrl,
+        linkedinUrl: lead.linkedinUrl ?? null,
+        email: lead.email ?? null,
         created: out.created,
         leadId: out.lead.id,
       });

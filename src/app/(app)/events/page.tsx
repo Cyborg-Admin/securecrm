@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { api } from "@/lib/client-api";
 
 type EventRow = {
@@ -253,6 +254,17 @@ export default function EventsPage() {
                   <li className="text-[var(--neo-muted)]">No registrations yet.</li>
                 ) : null}
               </ul>
+
+              <DeleteRecordButton
+                label="Delete event"
+                hint="Blocked while registrations exist — remove them or cancel the event instead."
+                onDelete={async () => {
+                  await api(`/api/events/${selectedId}`, { method: "DELETE" });
+                  setEvents((prev) => prev.filter((e) => e.id !== selectedId));
+                  setSelectedId(null);
+                  setRegistrations([]);
+                }}
+              />
             </>
           ) : (
             <p className="text-[var(--neo-muted)]">Select an event.</p>

@@ -114,7 +114,8 @@ CREATE INDEX IF NOT EXISTS idx_companies_org_owner
 CREATE TABLE IF NOT EXISTS leads (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  linkedin_uid      TEXT NOT NULL,
+  linkedin_uid      TEXT,
+  email             TEXT,
   full_name         TEXT NOT NULL,
   first_name        TEXT,
   last_name         TEXT,
@@ -132,10 +133,15 @@ CREATE TABLE IF NOT EXISTS leads (
   metadata_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (organization_id, linkedin_uid)
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_linkedin
+  ON leads(organization_id, linkedin_uid)
+  WHERE linkedin_uid IS NOT NULL AND linkedin_uid != '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_org_email
+  ON leads(organization_id, email)
+  WHERE email IS NOT NULL AND email != '';
 CREATE INDEX IF NOT EXISTS idx_leads_org_owner ON leads(organization_id, owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_leads_org_status ON leads(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_leads_org_company ON leads(organization_id, company_id);
@@ -248,6 +254,66 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_org_dedupe
   ON entity_activities(organization_id, dedupe_key)
   WHERE dedupe_key IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS email_threads (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL DEFAULT 'gmail',
+  external_thread_id TEXT,
+  subject           TEXT NOT NULL DEFAULT '',
+  snippet           TEXT,
+  participants_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_message_at   TIMESTAMPTZ,
+  source_url        TEXT,
+  metadata_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_threads_org_external
+  ON email_threads(organization_id, provider, external_thread_id)
+  WHERE external_thread_id IS NOT NULL AND external_thread_id != '';
+CREATE INDEX IF NOT EXISTS idx_email_threads_org_last
+  ON email_threads(organization_id, last_message_at);
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  thread_id         UUID NOT NULL REFERENCES email_threads(id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL DEFAULT 'gmail',
+  external_message_id TEXT,
+  subject           TEXT,
+  from_email        TEXT,
+  from_name         TEXT,
+  to_emails_json    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  cc_emails_json    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  snippet           TEXT,
+  body_text         TEXT,
+  source_url        TEXT,
+  direction         TEXT,
+  sent_at           TIMESTAMPTZ,
+  metadata_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_messages_org_external
+  ON email_messages(organization_id, provider, external_message_id)
+  WHERE external_message_id IS NOT NULL AND external_message_id != '';
+CREATE INDEX IF NOT EXISTS idx_email_messages_thread
+  ON email_messages(thread_id, sent_at);
+
+CREATE TABLE IF NOT EXISTS email_thread_links (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  thread_id         UUID NOT NULL REFERENCES email_threads(id) ON DELETE CASCADE,
+  entity_type       TEXT NOT NULL CHECK (entity_type IN ('lead', 'contact', 'company')),
+  entity_id         TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (organization_id, thread_id, entity_type, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_thread_links_entity
+  ON email_thread_links(organization_id, entity_type, entity_id);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -326,7 +392,7 @@ CREATE TABLE IF NOT EXISTS capture_batches (
 CREATE TABLE IF NOT EXISTS pipeline_stages (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  pipeline_key      TEXT NOT NULL CHECK (pipeline_key IN ('opportunity', 'event_sales', 'event_delegate')),
+  pipeline_key      TEXT NOT NULL CHECK (pipeline_key IN ('lead', 'opportunity', 'event_sales', 'event_delegate')),
   name              TEXT NOT NULL,
   sort_order        INTEGER NOT NULL DEFAULT 0,
   probability       INTEGER NOT NULL DEFAULT 0,

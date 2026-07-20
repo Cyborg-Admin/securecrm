@@ -14,7 +14,8 @@ import {
 export type LeadCaptureInput = {
   organizationId: string;
   actorUserId: string;
-  linkedinUrl: string;
+  linkedinUrl?: string | null;
+  email?: string | null;
   fullName: string;
   jobTitle?: string | null;
   companyName?: string | null;
@@ -33,7 +34,8 @@ export type LeadCaptureInput = {
 export type LeadRow = {
   id: string;
   organization_id: string;
-  linkedin_uid: string;
+  linkedin_uid: string | null;
+  email: string | null;
   full_name: string;
   first_name: string | null;
   last_name: string | null;
@@ -51,19 +53,50 @@ export type LeadRow = {
   metadata_json: string;
 };
 
+function normalizeLeadEmail(value: string | null | undefined): string | null {
+  const e = String(value || "")
+    .trim()
+    .toLowerCase();
+  return e.includes("@") ? e : null;
+}
+
 export async function captureLead(input: LeadCaptureInput): Promise<{
   lead: LeadRow;
   created: boolean;
   companyId: string | null;
 }> {
   const db = await getDbAsync();
-  const linkedinUid = normalizeLinkedInUid(input.linkedinUrl);
-  if (!linkedinUid || !input.fullName.trim()) {
-    throw new Error("VALIDATION:linkedin_uid and full_name are required");
+  const linkedinUid = input.linkedinUrl
+    ? normalizeLinkedInUid(input.linkedinUrl)
+    : null;
+  const email =
+    normalizeLeadEmail(input.email) ||
+    normalizeLeadEmail(
+      typeof input.metadata?.gmail_email === "string"
+        ? input.metadata.gmail_email
+        : null,
+    );
+
+  if (!input.fullName.trim()) {
+    throw new Error("VALIDATION:full_name is required");
+  }
+
+  const scrapeSources = ["linkedin", "salesnav", "cognism"];
+  if (scrapeSources.includes(input.source) && !linkedinUid) {
+    throw new Error(
+      "VALIDATION:linkedin_uid is required for LinkedIn / Sales Nav / Cognism capture",
+    );
+  }
+  if (!linkedinUid && !email) {
+    throw new Error("VALIDATION:linkedin_uid or email is required");
   }
 
   let companyId: string | null = null;
   if (input.companyName?.trim()) {
+    const logoUrl =
+      typeof input.metadata?.companyLogoUrl === "string"
+        ? input.metadata.companyLogoUrl
+        : null;
     const { company } = await upsertCompany({
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
@@ -72,16 +105,29 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
       industry: input.industry,
       location: input.location,
       ownerUserId: input.ownerUserId ?? input.actorUserId,
-      metadata: { source: input.source },
+      metadata: {
+        source: input.source,
+        ...(logoUrl ? { logoUrl } : {}),
+      },
     });
     companyId = company.id;
   }
 
-  const existing = await db
-    .prepare<LeadRow>(
-      `SELECT * FROM leads WHERE organization_id = ? AND linkedin_uid = ?`,
-    )
-    .get(input.organizationId, linkedinUid);
+  let existing: LeadRow | undefined;
+  if (linkedinUid) {
+    existing = await db
+      .prepare<LeadRow>(
+        `SELECT * FROM leads WHERE organization_id = ? AND linkedin_uid = ?`,
+      )
+      .get(input.organizationId, linkedinUid);
+  }
+  if (!existing && email) {
+    existing = await db
+      .prepare<LeadRow>(
+        `SELECT * FROM leads WHERE organization_id = ? AND lower(email) = ?`,
+      )
+      .get(input.organizationId, email);
+  }
 
   const names = splitName(input.fullName);
   const owner = input.ownerUserId ?? input.actorUserId;
@@ -96,6 +142,8 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
     await db
       .prepare(
         `UPDATE leads SET
+         linkedin_uid = COALESCE(?, linkedin_uid),
+         email = COALESCE(?, email),
          full_name = ?,
          first_name = ?,
          last_name = ?,
@@ -113,6 +161,8 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
        WHERE id = ? AND organization_id = ?`,
       )
       .run(
+        linkedinUid,
+        email,
         input.fullName.trim(),
         names.first_name,
         names.last_name,
@@ -159,15 +209,16 @@ export async function captureLead(input: LeadCaptureInput): Promise<{
   await db
     .prepare(
       `INSERT INTO leads
-     (id, organization_id, linkedin_uid, full_name, first_name, last_name,
+     (id, organization_id, linkedin_uid, email, full_name, first_name, last_name,
       job_title, company_id, company_name, industry, website, location, headline,
       source, source_url, status, owner_user_id, metadata_json, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
     )
     .run(
       id,
       input.organizationId,
       linkedinUid,
+      email,
       input.fullName.trim(),
       names.first_name,
       names.last_name,

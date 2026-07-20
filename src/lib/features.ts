@@ -48,6 +48,10 @@ export type OrgSettings = {
     /** User IDs allowed to approve (empty = any Admin with opportunities:approve) */
     approverUserIds: string[];
   };
+  /** Chrome Web Store listing URL for one-click Add to Chrome */
+  chromeExtensionStoreUrl: string;
+  /** Stable extension ID (for detection / external messaging) */
+  chromeExtensionId: string;
 };
 
 export const DEFAULT_ORG_SETTINGS: OrgSettings = {
@@ -58,6 +62,8 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
     requireApprovalStageIds: [],
     approverUserIds: [],
   },
+  chromeExtensionStoreUrl: "",
+  chromeExtensionId: "",
 };
 
 export function parseOrgSettings(raw: unknown): OrgSettings {
@@ -69,6 +75,12 @@ export function parseOrgSettings(raw: unknown): OrgSettings {
   const o = raw as Record<string, unknown>;
   if (typeof o.timezone === "string") base.timezone = o.timezone;
   if (typeof o.currency === "string") base.currency = o.currency;
+  if (typeof o.chromeExtensionStoreUrl === "string") {
+    base.chromeExtensionStoreUrl = o.chromeExtensionStoreUrl.trim();
+  }
+  if (typeof o.chromeExtensionId === "string") {
+    base.chromeExtensionId = o.chromeExtensionId.trim();
+  }
   if (o.opportunityApproval && typeof o.opportunityApproval === "object") {
     const a = o.opportunityApproval as Record<string, unknown>;
     if (typeof a.enabled === "boolean") base.opportunityApproval.enabled = a.enabled;

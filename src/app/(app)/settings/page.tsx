@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/client-api";
 import { FEATURE_KEYS } from "@/lib/features";
@@ -52,6 +54,8 @@ type OrgPayload = {
   settings: {
     timezone: string;
     currency: string;
+    chromeExtensionStoreUrl?: string;
+    chromeExtensionId?: string;
     opportunityApproval: {
       enabled: boolean;
       requireApprovalStageIds: string[];
@@ -70,11 +74,14 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "extension", label: "Extension" },
 ];
 
-export default function SettingsPage() {
+function SettingsInner() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("org");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>("—");
+  const [storeUrl, setStoreUrl] = useState("");
+  const [extensionId, setExtensionId] = useState("");
 
   const [org, setOrg] = useState<OrgPayload | null>(null);
   const [orgName, setOrgName] = useState("");
@@ -100,14 +107,15 @@ export default function SettingsPage() {
 
   const [stages, setStages] = useState<StageRow[]>([]);
   const [newStage, setNewStage] = useState({
-    pipelineKey: "opportunity",
+    pipelineKey: "lead",
     name: "",
     requiresApproval: false,
   });
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
-  const [keyName, setKeyName] = useState("Chrome Extension");
+  const [keyName, setKeyName] = useState("Integration");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
 
   async function loadOrg() {
     const data = await api<OrgPayload>("/api/org");
@@ -117,6 +125,8 @@ export default function SettingsPage() {
     setTimezone(data.settings.timezone);
     setCurrency(data.settings.currency);
     setApprovalEnabled(data.settings.opportunityApproval.enabled);
+    setStoreUrl(data.settings.chromeExtensionStoreUrl || "");
+    setExtensionId(data.settings.chromeExtensionId || "");
   }
 
   async function loadUsers() {
@@ -149,6 +159,20 @@ export default function SettingsPage() {
     const data = await api<{ keys: KeyRow[] }>("/api/settings/api-keys");
     setKeys(data.keys);
   }
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (
+      t === "org" ||
+      t === "users" ||
+      t === "roles" ||
+      t === "features" ||
+      t === "pipelines" ||
+      t === "extension"
+    ) {
+      setTab(t);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     void api<{ version: string }>("/api/version")
@@ -288,8 +312,26 @@ export default function SettingsPage() {
     await loadKeys();
   }
 
+  async function revokeKey(id: string) {
+    if (!confirm("Revoke this API key? It will stop working immediately.")) {
+      return;
+    }
+    setRevokingKeyId(id);
+    setError(null);
+    try {
+      await api(`/api/settings/api-keys/${id}`, { method: "DELETE" });
+      setCreatedKey(null);
+      await loadKeys();
+      setStatus("API key revoked.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not revoke key");
+    } finally {
+      setRevokingKeyId(null);
+    }
+  }
+
   return (
-    <AppShell>
+    <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="display text-3xl">Settings</h1>
@@ -552,6 +594,7 @@ export default function SettingsPage() {
                 setNewStage((s) => ({ ...s, pipelineKey: e.target.value }))
               }
             >
+              <option value="lead">Lead</option>
               <option value="opportunity">Opportunity</option>
               <option value="event_sales">Event · Sales</option>
               <option value="event_delegate">Event · Delegate</option>
@@ -580,9 +623,11 @@ export default function SettingsPage() {
               Add stage
             </button>
           </form>
-          {(["opportunity", "event_sales", "event_delegate"] as const).map((key) => (
+          {(["lead", "opportunity", "event_sales", "event_delegate"] as const).map((key) => (
             <section key={key} className="neo-raised p-4">
-              <h3 className="record-section-title">{key.replace("_", " · ")}</h3>
+              <h3 className="record-section-title">
+                {key === "lead" ? "Lead" : key.replace("_", " · ")}
+              </h3>
               <ul className="mt-2 space-y-2">
                 {stages
                   .filter((s) => s.pipeline_key === key)
@@ -617,42 +662,137 @@ export default function SettingsPage() {
       )}
 
       {tab === "extension" && (
-        <div className="neo-raised mt-4 space-y-4 p-5">
-          <p className="text-sm text-[var(--neo-muted)]">
-            Generate a key for the Chrome extension. Download the latest package:
-          </p>
-          <a className="neo-btn neo-btn-primary inline-block" href="/api/extension/download">
-            Download extension
-          </a>
-          <form onSubmit={createKey} className="flex flex-wrap gap-2">
-            <input
-              className="neo-input max-w-xs"
-              value={keyName}
-              onChange={(e) => setKeyName(e.target.value)}
-            />
-            <button className="neo-btn neo-btn-primary" type="submit">
-              Create API key
+        <div className="neo-raised mt-4 space-y-5 p-5">
+          <div>
+            <p className="text-sm text-[var(--neo-muted)]">
+              Team members install from{" "}
+              <Link className="underline" href="/extension">
+                Extension → Add to Chrome
+              </Link>
+              , then sign in with their KINETIC email and password in the side
+              panel. API keys below are for other integrations only.
+            </p>
+            <Link href="/extension" className="neo-btn neo-btn-primary mt-3 inline-block">
+              Open install page
+            </Link>
+          </div>
+
+          <form
+            className="space-y-3 border-t border-[var(--line)] pt-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setError(null);
+              setStatus(null);
+              try {
+                await api("/api/org", {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    settings: {
+                      chromeExtensionStoreUrl: storeUrl.trim(),
+                      chromeExtensionId: extensionId.trim(),
+                    },
+                  }),
+                });
+                setStatus("Chrome Web Store install link saved.");
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Save failed");
+              }
+            }}
+          >
+            <h3 className="record-section-title">Add to Chrome listing</h3>
+            <label className="block text-sm">
+              <span className="text-[var(--neo-muted)]">Chrome Web Store URL</span>
+              <input
+                className="neo-input mt-1"
+                type="url"
+                value={storeUrl}
+                onChange={(e) => setStoreUrl(e.target.value)}
+                placeholder="https://chrome.google.com/webstore/detail/…"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-[var(--neo-muted)]">Extension ID</span>
+              <input
+                className="neo-input mt-1 font-mono text-xs"
+                value={extensionId}
+                onChange={(e) => setExtensionId(e.target.value)}
+                placeholder="from the store URL or chrome://extensions"
+              />
+            </label>
+            <button className="neo-btn" type="submit">
+              Save listing
             </button>
           </form>
-          {createdKey ? (
-            <p className="break-all rounded-xl bg-[var(--accent-soft)] p-3 text-sm">
-              Copy now — shown once: <code>{createdKey}</code>
+
+          <div className="border-t border-[var(--line)] pt-4">
+            <h3 className="record-section-title">API keys</h3>
+            <p className="mt-1 text-sm text-[var(--neo-muted)]">
+              Optional keys for scripts and integrations. The Chrome extension
+              uses your login instead — revoke any old extension keys here.
             </p>
-          ) : null}
-          <ul className="space-y-2 text-sm">
-            {keys.map((k) => (
-              <li key={k.id} className="flex justify-between gap-2 border-t border-[var(--line)] pt-2">
-                <span>
-                  {k.name} · {k.key_prefix}…
-                </span>
-                <span className="text-[var(--neo-muted)]">
-                  {k.revoked_at ? "Revoked" : "Active"}
-                </span>
-              </li>
-            ))}
-          </ul>
+            <form onSubmit={createKey} className="mt-3 flex flex-wrap gap-2">
+              <input
+                className="neo-input max-w-xs"
+                value={keyName}
+                onChange={(e) => setKeyName(e.target.value)}
+                placeholder="Integration name"
+              />
+              <button className="neo-btn neo-btn-primary" type="submit">
+                Create API key
+              </button>
+            </form>
+            {createdKey ? (
+              <p className="mt-3 break-all rounded-xl bg-[var(--accent-soft)] p-3 text-sm">
+                Copy now — shown once: <code>{createdKey}</code>
+              </p>
+            ) : null}
+            <ul className="mt-3 space-y-2 text-sm">
+              {keys.map((k) => (
+                <li
+                  key={k.id}
+                  className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-2"
+                >
+                  <span>
+                    {k.name} · {k.key_prefix}…
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[var(--neo-muted)]">
+                      {k.revoked_at ? "Revoked" : "Active"}
+                    </span>
+                    {!k.revoked_at ? (
+                      <button
+                        type="button"
+                        className="neo-btn"
+                        disabled={revokingKeyId === k.id}
+                        onClick={() => void revokeKey(k.id)}
+                      >
+                        {revokingKeyId === k.id ? "Revoking…" : "Revoke"}
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <p className="text-xs text-[var(--neo-muted)]">
+            Store package (for Web Store upload):{" "}
+            <a className="underline" href="/api/extension/download">
+              Download zip
+            </a>
+          </p>
         </div>
       )}
+    </>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <AppShell>
+      <Suspense fallback={<p className="text-[var(--neo-muted)]">Loading settings…</p>}>
+        <SettingsInner />
+      </Suspense>
     </AppShell>
   );
 }

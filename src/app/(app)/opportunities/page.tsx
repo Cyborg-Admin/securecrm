@@ -3,6 +3,7 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
+import { DeleteRecordButton } from "@/components/DeleteRecordButton";
 import { api } from "@/lib/client-api";
 
 type Opp = {
@@ -358,6 +359,18 @@ function OpportunitiesInner() {
                   </button>
                 </form>
               </div>
+
+              <DeleteRecordButton
+                label="Delete opportunity"
+                hint="Blocked while approval is pending or event registrations are linked."
+                onDelete={async () => {
+                  await api(`/api/opportunities/${selected.id}`, {
+                    method: "DELETE",
+                  });
+                  setOpps((prev) => prev.filter((o) => o.id !== selected.id));
+                  setSelected(null);
+                }}
+              />
             </div>
           ) : (
             <p className="text-[var(--neo-muted)]">Select an opportunity.</p>

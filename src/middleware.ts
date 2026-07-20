@@ -79,7 +79,7 @@ function corsHeaders(origin: string): Record<string, string> {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-API-Key, X-CSRF-Token",
+      "Content-Type, Authorization, X-API-Key, X-Session-Token, X-CSRF-Token",
     "Access-Control-Allow-Credentials": "true",
     Vary: "Origin",
   };

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { getDbAsync } from "@/lib/db";
+import { DeleteBlockedError, deleteEvent } from "@/lib/deletes";
 import { assertFeatureEnabled } from "@/lib/org";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -107,4 +108,28 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   const event = await db.prepare(`SELECT * FROM events WHERE id = ?`).get(id);
   return json({ event });
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const user = await requireUser(req, "events:delete");
+  if (isResponse(user)) return user;
+  if (!(await assertFeatureEnabled(user.organization_id, "events"))) {
+    return error("Events feature disabled", 403);
+  }
+  const { id } = await ctx.params;
+
+  try {
+    await deleteEvent({
+      organizationId: user.organization_id,
+      actorUserId: user.id,
+      eventId: id,
+    });
+    return json({ ok: true });
+  } catch (e) {
+    if (e instanceof DeleteBlockedError) return error(e.message, 400);
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return error("Event not found", 404);
+    }
+    throw e;
+  }
 }

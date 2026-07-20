@@ -22,6 +22,9 @@ let deepScrape = {
   status: "idle",
 };
 
+let updateWindowId = null;
+let applyingUpdate = false;
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.get(null, (data) => {
     const patch = {};
@@ -40,7 +43,59 @@ chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch(() => {});
 
-async function checkForUpdate() {
+function compareVersions(a, b) {
+  const pa = String(a || "0")
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || "0")
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+async function getInstallType() {
+  try {
+    const self = await chrome.management.getSelf();
+    return self.installType || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function openUpdaterWindow() {
+  if (updateWindowId != null) {
+    try {
+      await chrome.windows.update(updateWindowId, { focused: true });
+      return;
+    } catch {
+      updateWindowId = null;
+    }
+  }
+  const win = await chrome.windows.create({
+    url: chrome.runtime.getURL("updater/updater.html"),
+    type: "popup",
+    width: 460,
+    height: 320,
+    focused: true,
+  });
+  updateWindowId = win.id ?? null;
+}
+
+chrome.windows.onRemoved.addListener((id) => {
+  if (id === updateWindowId) updateWindowId = null;
+});
+
+// Store / enterprise installs: apply as soon as Chrome downloads the package
+chrome.runtime.onUpdateAvailable.addListener(() => {
+  chrome.runtime.reload();
+});
+
+async function checkForUpdate({ apply = true } = {}) {
   try {
     const { apiBase } = await chrome.storage.sync.get(["apiBase"]);
     const base = (apiBase || DEFAULTS.apiBase).replace(/\/$/, "");
@@ -50,41 +105,78 @@ async function checkForUpdate() {
     if (!res.ok) return;
     const remote = await res.json();
     const local = chrome.runtime.getManifest().version;
+    const updateAvailable = compareVersions(remote.version, local) > 0;
     const update = {
       localVersion: local,
       remoteVersion: remote.version,
       downloadUrl: remote.downloadUrl,
+      sourcesUrl: remote.sourcesUrl || `${base}/api/extension/sources`,
       releaseNotes: remote.releaseNotes || "",
-      updateAvailable: remote.version !== local,
+      updateAvailable,
       checkedAt: new Date().toISOString(),
+      autoUpdate: Boolean(remote.autoUpdate),
     };
     await chrome.storage.local.set({ extensionUpdate: update });
-    if (update.updateAvailable) {
-      chrome.action.setBadgeText({ text: "UP" });
-      chrome.action.setBadgeBackgroundColor({ color: "#0d7a5f" });
-    } else {
+
+    if (!updateAvailable) {
       chrome.action.setBadgeText({ text: "" });
+      return update;
     }
+
+    chrome.action.setBadgeText({ text: "UP" });
+    chrome.action.setBadgeBackgroundColor({ color: "#0d7a5f" });
+
+    if (!apply || applyingUpdate) return update;
+    applyingUpdate = true;
+    try {
+      const installType = await getInstallType();
+      if (installType === "normal" || installType === "admin") {
+        const status = await chrome.runtime.requestUpdateCheck();
+        if (status.status === "update_available") {
+          // onUpdateAvailable → reload
+          return update;
+        }
+      }
+
+      const { autoUpdateEnabled } = await chrome.storage.local.get([
+        "autoUpdateEnabled",
+      ]);
+      await chrome.storage.local.set({ pendingAutoUpdate: true });
+
+      if (autoUpdateEnabled) {
+        await openUpdaterWindow();
+      }
+      // Otherwise leave the UP badge — user opens side panel → Update now
+    } finally {
+      applyingUpdate = false;
+    }
+    return update;
   } catch {
-    /* ignore */
+    return null;
   }
 }
 
-chrome.alarms.create("scrm-update-check", { periodInMinutes: 360 });
+chrome.alarms.create("scrm-update-check", { periodInMinutes: 60 });
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "scrm-update-check") checkForUpdate();
+  if (alarm.name === "scrm-update-check") {
+    checkForUpdate({ apply: true });
+  }
 });
 
 async function getApiConfig() {
   const data = await chrome.storage.sync.get([
     "apiBase",
     "apiKey",
+    "sessionToken",
+    "csrfToken",
     "deepScrapeDelayMs",
     "deepScrapeMaxProfiles",
   ]);
   return {
     apiBase: (data.apiBase || DEFAULTS.apiBase).replace(/\/$/, ""),
     apiKey: data.apiKey || "",
+    sessionToken: data.sessionToken || "",
+    csrfToken: data.csrfToken || "",
     delay: Number(data.deepScrapeDelayMs) || DEFAULTS.deepScrapeDelayMs,
     max: Number(data.deepScrapeMaxProfiles) || DEFAULTS.deepScrapeMaxProfiles,
   };
@@ -140,14 +232,21 @@ async function scrapeTab(tabId) {
 }
 
 async function captureLeadRemote(lead) {
-  const { apiBase, apiKey } = await getApiConfig();
-  if (!apiKey) throw new Error("API key missing");
+  const { apiBase, apiKey, sessionToken, csrfToken } = await getApiConfig();
+  if (!sessionToken && !apiKey) throw new Error("Sign in to KINETIC in the side panel");
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (sessionToken) {
+    headers.Authorization = `Bearer ${sessionToken}`;
+    headers["X-Session-Token"] = sessionToken;
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  } else {
+    headers["X-API-Key"] = apiKey;
+  }
   const res = await fetch(`${apiBase}/api/extension/capture`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-    },
+    headers,
     body: JSON.stringify({
       source: "linkedin",
       sourceUrl: lead.linkedinUrl,
@@ -245,9 +344,30 @@ async function runDeepScrape(urls) {
   await publishStatus();
 }
 
+chrome.runtime.onMessageExternal.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "KINETIC_PING" || msg?.type === "PING") {
+    sendResponse({
+      ok: true,
+      version: chrome.runtime.getManifest().version,
+      extensionId: chrome.runtime.id,
+      name: chrome.runtime.getManifest().name,
+    });
+    return true;
+  }
+  return false;
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "CHECK_UPDATE") {
-    checkForUpdate().then(() => sendResponse({ ok: true }));
+    checkForUpdate({ apply: Boolean(msg.apply) })
+      .then((update) => sendResponse({ ok: true, update }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg?.type === "APPLY_UPDATE") {
+    openUpdaterWindow()
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   if (msg?.type === "OPEN_SIDE_PANEL") {
@@ -287,4 +407,4 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-checkForUpdate();
+checkForUpdate({ apply: true });

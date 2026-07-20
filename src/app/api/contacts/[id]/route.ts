@@ -3,6 +3,7 @@ import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { getDbAsync } from "@/lib/db";
 import { writeAudit } from "@/lib/audit";
+import { DeleteBlockedError, deleteContact } from "@/lib/deletes";
 
 const patchSchema = z.object({
   fullName: z.string().min(1).max(200).optional(),
@@ -105,4 +106,25 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     after: contact,
   });
   return json({ contact });
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const user = await requireUser(req, "contacts:delete");
+  if (isResponse(user)) return user;
+  const { id } = await ctx.params;
+
+  try {
+    await deleteContact({
+      organizationId: user.organization_id,
+      actorUserId: user.id,
+      contactId: id,
+    });
+    return json({ ok: true });
+  } catch (e) {
+    if (e instanceof DeleteBlockedError) return error(e.message, 400);
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return error("Contact not found", 404);
+    }
+    throw e;
+  }
 }

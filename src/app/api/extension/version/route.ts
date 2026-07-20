@@ -3,7 +3,7 @@ import { json } from "@/lib/api";
 import { readFileSync } from "fs";
 import path from "path";
 
-const FALLBACK_VERSION = "1.5.0";
+const FALLBACK_VERSION = "1.5.5";
 
 function readExtensionVersion(): string {
   try {
@@ -24,17 +24,20 @@ function readExtensionVersion(): string {
 /** Public: extension update metadata (no auth required for version check). */
 export async function GET(req: NextRequest) {
   const version = readExtensionVersion();
-  const base =
+  const base = (
     process.env.NEXT_PUBLIC_APP_URL ||
     req.nextUrl.origin ||
-    "http://localhost:3000";
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
 
   return json({
     name: "KINETIC Lead Capture",
     version,
-    downloadUrl: `${base.replace(/\/$/, "")}/api/extension/download`,
+    downloadUrl: `${base}/api/extension/download`,
+    sourcesUrl: `${base}/api/extension/sources`,
+    autoUpdate: true,
     releaseNotes:
-      "Enrich: compare page vs CRM, fill missing fields, overwrite mismatches. Reload unpacked extension.",
+      "Scrape isolation: ignore KINETIC injected UI. Platform: delete leads/contacts/accounts/opps/events with related-object checks.",
     minAppVersion: "0.1.0",
     checkedAt: new Date().toISOString(),
   });

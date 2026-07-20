@@ -12,10 +12,24 @@ document.querySelectorAll(".tab").forEach((tab) => {
   });
 });
 
+async function renderAccount() {
+  const cfg = await SecureCRM.getConfig();
+  const signedIn = Boolean(cfg.sessionToken || cfg.apiKey);
+  $("accountSignedIn").hidden = !signedIn;
+  $("accountSignedOut").hidden = signedIn;
+  if ($("apiBase") && !$("apiBase").value) {
+    $("apiBase").value = cfg.apiBase || "https://crm.cyborgwales.com";
+  }
+  if (signedIn) {
+    const name = cfg.userName || cfg.userEmail || "Signed in";
+    const org = cfg.orgName ? ` · ${cfg.orgName}` : "";
+    $("accountSummary").textContent = `${name}${org}`;
+  }
+}
+
 async function loadSettings() {
   const data = await chrome.storage.sync.get([
     "apiBase",
-    "apiKey",
     "showBadges",
     "autoScanGmail",
     "showFab",
@@ -24,9 +38,14 @@ async function loadSettings() {
     "deepScrapeDelayMs",
     "deepScrapeMaxProfiles",
     "trainMode",
+    "userEmail",
   ]);
-  $("apiBase").value = data.apiBase || "https://crm.cyborgwales.com";
-  $("apiKey").value = data.apiKey || "";
+  if ($("apiBase")) {
+    $("apiBase").value = data.apiBase || "https://crm.cyborgwales.com";
+  }
+  if ($("loginEmail") && data.userEmail) {
+    $("loginEmail").value = data.userEmail;
+  }
   $("showBadges").checked = data.showBadges !== false;
   $("autoScanGmail").checked = data.autoScanGmail !== false;
   $("showFab").checked = data.showFab !== false;
@@ -36,12 +55,58 @@ async function loadSettings() {
   $("deepScrapeMaxProfiles").value = data.deepScrapeMaxProfiles ?? 25;
   $("trainMode").checked = Boolean(data.trainMode);
   $("localVersion").textContent = chrome.runtime.getManifest().version;
+  await renderAccount();
+  try {
+    const cfg = await SecureCRM.getConfig();
+    if (cfg.sessionToken) {
+      await SecureCRM.refreshSession();
+      await renderAccount();
+    }
+  } catch {
+    await chrome.storage.sync.set({
+      sessionToken: "",
+      csrfToken: "",
+      userEmail: "",
+      userName: "",
+      orgName: "",
+    });
+    await renderAccount();
+  }
 }
+
+$("signIn")?.addEventListener("click", async () => {
+  const status = $("authStatus");
+  const email = $("loginEmail").value.trim();
+  const password = $("loginPassword").value;
+  const apiBase = $("apiBase").value.trim() || "https://crm.cyborgwales.com";
+  if (!email || !password) {
+    status.textContent = "Enter your work email and password.";
+    return;
+  }
+  $("signIn").disabled = true;
+  status.textContent = "Signing in…";
+  try {
+    await SecureCRM.login(email, password, apiBase);
+    $("loginPassword").value = "";
+    status.textContent = "Signed in.";
+    await renderAccount();
+    chrome.runtime.sendMessage({ type: "CHECK_UPDATE" });
+  } catch (e) {
+    status.textContent = e.message || "Sign-in failed";
+  } finally {
+    $("signIn").disabled = false;
+  }
+});
+
+$("signOut")?.addEventListener("click", async () => {
+  await SecureCRM.logout();
+  $("authStatus").textContent = "Signed out.";
+  await renderAccount();
+});
 
 $("saveSettings").addEventListener("click", async () => {
   await chrome.storage.sync.set({
     apiBase: $("apiBase").value.trim() || "https://crm.cyborgwales.com",
-    apiKey: $("apiKey").value.trim(),
     showBadges: $("showBadges").checked,
     autoScanGmail: $("autoScanGmail").checked,
     showFab: $("showFab").checked,
@@ -61,11 +126,44 @@ $("saveSettings").addEventListener("click", async () => {
 });
 
 $("trainMode").addEventListener("change", async () => {
-  await chrome.storage.sync.set({ trainMode: $("trainMode").checked });
+  const on = $("trainMode").checked;
+  await chrome.storage.sync.set({ trainMode: on });
+  $("settingsStatus").textContent = on
+    ? "Train mode enabled — open a LinkedIn profile and click elements to map fields."
+    : "Train mode disabled.";
 });
 
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.trainMode && $("trainMode")) {
+    $("trainMode").checked = Boolean(changes.trainMode.newValue);
+  }
+});
+
+async function renderAutoUpdateStatus() {
+  const el = $("autoUpdateStatus");
+  if (!el) return;
+  const { autoUpdateEnabled, autoUpdateFolderLinkedAt } =
+    await chrome.storage.local.get([
+      "autoUpdateEnabled",
+      "autoUpdateFolderLinkedAt",
+    ]);
+  const handle = await KineticAutoUpdate.getDirHandle();
+  if (autoUpdateEnabled && handle) {
+    const when = autoUpdateFolderLinkedAt
+      ? new Date(autoUpdateFolderLinkedAt).toLocaleString()
+      : "linked";
+    el.textContent = `Auto-updates on · folder linked ${when}`;
+  } else {
+    el.textContent =
+      "Auto-updates off · link the unpacked extension folder once to enable.";
+  }
+}
+
 async function renderUpdate() {
-  const { extensionUpdate } = await chrome.storage.local.get(["extensionUpdate"]);
+  const { extensionUpdate, autoUpdateEnabled } = await chrome.storage.local.get([
+    "extensionUpdate",
+    "autoUpdateEnabled",
+  ]);
   const banner = $("updateBanner");
   if (!extensionUpdate?.updateAvailable) {
     banner.hidden = true;
@@ -75,14 +173,62 @@ async function renderUpdate() {
   $("remoteVersion").textContent = extensionUpdate.remoteVersion;
   $("releaseNotes").textContent = extensionUpdate.releaseNotes || "";
   $("downloadUpdate").href = extensionUpdate.downloadUrl || "#";
+  $("autoUpdateHint").textContent = autoUpdateEnabled
+    ? "Auto-update is enabled — click Update now, or wait for the updater window."
+    : "One-time: enable auto-updates in Settings (link folder), then updates apply themselves.";
 }
 
 $("checkUpdate").addEventListener("click", async () => {
   $("checkUpdate").disabled = true;
-  await chrome.runtime.sendMessage({ type: "CHECK_UPDATE" });
+  await chrome.runtime.sendMessage({ type: "CHECK_UPDATE", apply: false });
   await new Promise((r) => setTimeout(r, 400));
   await renderUpdate();
+  await renderAutoUpdateStatus();
   $("checkUpdate").disabled = false;
+});
+
+$("applyUpdate").addEventListener("click", async () => {
+  $("applyUpdate").disabled = true;
+  try {
+    const handle = await KineticAutoUpdate.getDirHandle();
+    if (!handle) {
+      await KineticAutoUpdate.linkExtensionFolder();
+    }
+    $("autoUpdateHint").textContent = "Applying update…";
+    const result = await KineticAutoUpdate.applyFolderUpdate({ force: true });
+    if (!result.applied) {
+      // Fallback: store/enterprise channel or permission prompt window
+      await chrome.runtime.sendMessage({ type: "APPLY_UPDATE" });
+      $("autoUpdateHint").textContent =
+        result.reason === "permission_denied"
+          ? "Allow folder access in the updater window."
+          : "Opening updater…";
+    } else {
+      $("autoUpdateHint").textContent = `Updated to v${result.version}. Reloading…`;
+    }
+  } catch (e) {
+    $("autoUpdateHint").textContent = e.message || "Could not start update";
+  } finally {
+    $("applyUpdate").disabled = false;
+  }
+});
+
+$("linkAutoUpdate").addEventListener("click", async () => {
+  try {
+    await KineticAutoUpdate.linkExtensionFolder();
+    $("settingsStatus").textContent =
+      "Auto-updates enabled. New versions will sync and reload automatically.";
+    await renderAutoUpdateStatus();
+    await chrome.runtime.sendMessage({ type: "CHECK_UPDATE", apply: true });
+  } catch (e) {
+    $("settingsStatus").textContent = e.message || "Could not enable auto-updates";
+  }
+});
+
+$("unlinkAutoUpdate").addEventListener("click", async () => {
+  await KineticAutoUpdate.clearDirHandle();
+  $("settingsStatus").textContent = "Auto-updates disabled.";
+  await renderAutoUpdateStatus();
 });
 
 async function searchLeads() {
@@ -195,7 +341,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
 setInterval(refreshDeepStatus, 2000);
 
 loadSettings()
+  .then(renderAutoUpdateStatus)
   .then(renderUpdate)
+  .then(async () => {
+    const { pendingAutoUpdate, autoUpdateEnabled } =
+      await chrome.storage.local.get(["pendingAutoUpdate", "autoUpdateEnabled"]);
+    if (pendingAutoUpdate && autoUpdateEnabled) {
+      await chrome.runtime.sendMessage({ type: "APPLY_UPDATE" });
+    }
+  })
   .then(searchLeads)
   .then(refreshDeepStatus)
   .catch(() => {});

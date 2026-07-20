@@ -2,6 +2,18 @@
   let lastFingerprint = "";
   let scanTimer = null;
 
+  function collectEmails(nodes) {
+    const out = [];
+    for (const node of nodes || []) {
+      const email =
+        node.getAttribute?.("email") ||
+        node.getAttribute?.("data-hovercard-id") ||
+        "";
+      if (email && email.includes("@")) out.push(email.toLowerCase());
+    }
+    return [...new Set(out)];
+  }
+
   function parseOpenEmail() {
     const main =
       document.querySelector('[role="main"]') ||
@@ -29,21 +41,65 @@
       SecureCRM.text(fromNode) ||
       "";
 
+    const toNodes = main.querySelectorAll(
+      ".g2 span[email], .hb span[email], span.g2[email], [email].g2",
+    );
+    const ccNodes = main.querySelectorAll(
+      ".gD[email], span[email]",
+    );
+    const toEmails = collectEmails(toNodes).filter(
+      (e) => e !== String(email).toLowerCase(),
+    );
+    const allParticipantEmails = collectEmails(ccNodes);
+    const ccEmails = allParticipantEmails.filter(
+      (e) =>
+        e !== String(email).toLowerCase() && !toEmails.includes(e),
+    );
+
     let companyName = null;
     if (email && email.includes("@")) {
       const domain = email.split("@")[1] || "";
-      if (domain && !/(gmail|yahoo|hotmail|outlook|icloud|googlemail)\./i.test(domain)) {
+      if (
+        domain &&
+        !/(gmail|yahoo|hotmail|outlook|icloud|googlemail)\./i.test(domain)
+      ) {
         companyName = domain.split(".")[0];
       }
     }
 
-    const bodyText =
-      SecureCRM.text(main.querySelector(".a3s")) ||
-      SecureCRM.text(main.querySelector("[data-message-id]")) ||
-      "";
+    const bodyEl =
+      main.querySelector(".a3s.aiL") ||
+      main.querySelector(".a3s") ||
+      main.querySelector("[data-message-id]");
+    const bodyText = SecureCRM.text(bodyEl) || "";
     const linkedinMatch = bodyText.match(
       /https?:\/\/([\w.-]*\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+/i,
     );
+
+    const threadEl =
+      main.querySelector("[data-thread-perm-id]") ||
+      document.querySelector("[data-thread-perm-id]");
+    const externalThreadId =
+      threadEl?.getAttribute("data-thread-perm-id") ||
+      threadEl?.getAttribute("data-legacy-thread-id") ||
+      null;
+
+    const messageEl =
+      main.querySelector("[data-message-id]") ||
+      main.querySelector("[data-legacy-message-id]");
+    const externalMessageId =
+      messageEl?.getAttribute("data-message-id") ||
+      messageEl?.getAttribute("data-legacy-message-id") ||
+      null;
+
+    const timeEl =
+      main.querySelector("span.g3") ||
+      main.querySelector("span[title].g3") ||
+      main.querySelector(".gH span[title]");
+    const sentAt =
+      timeEl?.getAttribute("title") ||
+      timeEl?.getAttribute("alt") ||
+      null;
 
     return {
       fullName: fullName || null,
@@ -52,6 +108,12 @@
       linkedinUrl: linkedinMatch ? linkedinMatch[0] : null,
       subject,
       snippet: (bodyText || "").slice(0, 600),
+      bodyText: (bodyText || "").slice(0, 4000),
+      toEmails,
+      ccEmails: ccEmails.slice(0, 12),
+      externalThreadId,
+      externalMessageId,
+      sentAt,
     };
   }
 
@@ -60,6 +122,8 @@
       person.email || "",
       person.fullName || "",
       person.subject || "",
+      person.externalThreadId || "",
+      person.externalMessageId || "",
       person.linkedinUrl || "",
     ].join("|");
   }
@@ -88,8 +152,15 @@
           subject: person.subject,
           fromEmail: person.email,
           fromName: person.fullName,
+          toEmails: person.toEmails,
+          ccEmails: person.ccEmails,
           sourceUrl: location.href,
           snippet: person.snippet,
+          bodyText: person.bodyText,
+          externalThreadId: person.externalThreadId,
+          externalMessageId: person.externalMessageId,
+          sentAt: person.sentAt,
+          direction: "inbound",
         },
       });
 
@@ -98,7 +169,7 @@
       if (res.closeMatch && res.best) {
         const b = res.best;
         const logged = res.activityLogged
-          ? "\nActivity logged on open"
+          ? "\nConversation logged"
           : "";
         SecureCRMPanel.showPanel(
           `Match (${b.score})\n${b.entity_type.toUpperCase()}: ${b.full_name}\n${b.job_title || ""}\n${b.company_name || b.email || ""}${logged}`,
@@ -128,6 +199,7 @@
                   linkedinUrl: person.linkedinUrl
                     ? SecureCRM.normalizeLinkedIn(person.linkedinUrl)
                     : "",
+                  email: person.email || "",
                   fullName: person.fullName || person.email || "",
                   jobTitle: null,
                   companyName: person.companyName,
@@ -144,6 +216,7 @@
                 };
                 const filled = await SecureCRMForm.showLeadForm(draft);
                 if (!filled) return;
+                if (person.email && !filled.email) filled.email = person.email;
                 const out = await SecureCRM.captureLeads({
                   source: "gmail",
                   sourceUrl: location.href,
@@ -152,31 +225,27 @@
                 const leadId = out.results?.[0]?.leadId;
                 if (leadId) {
                   try {
-                    await SecureCRM.logActivity({
-                      entityType: "lead",
-                      entityId: leadId,
-                      activityType: "email_scanned",
-                      title: `Email captured: ${person.subject || "(no subject)"}`,
-                      body: [
-                        person.email
-                          ? `From: ${person.fullName || ""} <${person.email}>`.trim()
-                          : null,
-                        person.snippet || null,
-                      ]
-                        .filter(Boolean)
-                        .join("\n\n"),
-                      dedupeKey: `gmail-capture:${leadId}:${person.email || ""}:${person.subject || ""}`.slice(
-                        0,
-                        390,
-                      ),
-                      metadata: {
+                    await SecureCRM.matchPerson({
+                      fullName: filled.fullName,
+                      email: filled.email || person.email,
+                      linkedinUrl: filled.linkedinUrl || null,
+                      emailContext: {
                         subject: person.subject,
                         fromEmail: person.email,
+                        fromName: person.fullName,
+                        toEmails: person.toEmails,
+                        ccEmails: person.ccEmails,
                         sourceUrl: location.href,
+                        snippet: person.snippet,
+                        bodyText: person.bodyText,
+                        externalThreadId: person.externalThreadId,
+                        externalMessageId: person.externalMessageId,
+                        sentAt: person.sentAt,
+                        direction: "inbound",
                       },
                     });
                   } catch {
-                    /* activity is best-effort */
+                    /* conversation log is best-effort */
                   }
                 }
                 SecureCRMPanel.setStatus(
@@ -212,7 +281,6 @@
   }
 
   async function mount() {
-    document.getElementById("scrm-float-gmail")?.remove();
     await SecureCRMFAB.mount(
       [
         {
@@ -221,31 +289,17 @@
           primary: true,
           onClick: () => runMatch(),
         },
-        {
-          id: "rescan",
-          label: "Rescan thread",
-          onClick: () => {
-            lastFingerprint = "";
-            runMatch();
-          },
-        },
       ],
-      { title: "KINETIC · Gmail" },
+      { title: "Gmail → KINETIC" },
     );
+    scheduleScan();
   }
 
-  mount();
-  scheduleScan();
-
-  new MutationObserver(() => {
-    if (!document.getElementById("scrm-fab-root")) mount();
-    scheduleScan();
-  }).observe(document.documentElement, { childList: true, subtree: true });
-
-  // Hash / history changes when switching threads
-  window.addEventListener("hashchange", () => {
-    lastFingerprint = "";
-    scheduleScan();
-  });
-  setInterval(() => scheduleScan(), 1200);
+  const obs = new MutationObserver(() => scheduleScan());
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => void mount());
+  } else {
+    void mount();
+  }
 })();

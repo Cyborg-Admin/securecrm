@@ -3,6 +3,7 @@ import { z } from "zod";
 import { error, isResponse, json, requireUser } from "@/lib/api";
 import { updateCompany } from "@/lib/companies";
 import { getDbAsync } from "@/lib/db";
+import { DeleteBlockedError, deleteCompany } from "@/lib/deletes";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -91,5 +92,26 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (msg === "NOT_FOUND") return error("Company not found", 404);
     if (msg === "NAME_CONFLICT") return error("Company name already exists", 409);
     return error(msg, 400);
+  }
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const user = await requireUser(req, "companies:delete");
+  if (isResponse(user)) return user;
+  const { id } = await ctx.params;
+
+  try {
+    await deleteCompany({
+      organizationId: user.organization_id,
+      actorUserId: user.id,
+      companyId: id,
+    });
+    return json({ ok: true });
+  } catch (e) {
+    if (e instanceof DeleteBlockedError) return error(e.message, 400);
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return error("Company not found", 404);
+    }
+    throw e;
   }
 }

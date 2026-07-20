@@ -4,20 +4,34 @@ import { error, isResponse, json, requireUser } from "@/lib/api";
 import { getDbAsync } from "@/lib/db";
 import { captureLead } from "@/lib/leads";
 
-const captureSchema = z.object({
-  linkedinUrl: z.string().min(5).max(500),
-  fullName: z.string().min(1).max(200),
-  jobTitle: z.string().max(200).optional().nullable(),
-  companyName: z.string().max(200).optional().nullable(),
-  industry: z.string().max(200).optional().nullable(),
-  website: z.string().max(300).optional().nullable(),
-  location: z.string().max(200).optional().nullable(),
-  headline: z.string().max(500).optional().nullable(),
-  source: z.enum(["linkedin", "salesnav", "cognism", "gmail", "manual"]).default("manual"),
-  sourceUrl: z.string().max(1000).optional().nullable(),
-  ownerUserId: z.string().uuid().optional().nullable(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+const captureSchema = z
+  .object({
+    linkedinUrl: z
+      .preprocess(
+        (v) => (typeof v === "string" && !v.trim() ? null : v),
+        z.string().min(5).max(500).optional().nullable(),
+      ),
+    email: z.preprocess(
+      (v) => (typeof v === "string" && !v.trim() ? null : v),
+      z.string().email().max(320).optional().nullable(),
+    ),
+    fullName: z.string().min(1).max(200),
+    jobTitle: z.string().max(200).optional().nullable(),
+    companyName: z.string().max(200).optional().nullable(),
+    industry: z.string().max(200).optional().nullable(),
+    website: z.string().max(300).optional().nullable(),
+    location: z.string().max(200).optional().nullable(),
+    headline: z.string().max(500).optional().nullable(),
+    source: z
+      .enum(["linkedin", "salesnav", "cognism", "gmail", "manual"])
+      .default("manual"),
+    sourceUrl: z.string().max(1000).optional().nullable(),
+    ownerUserId: z.string().uuid().optional().nullable(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .refine((l) => Boolean(l.linkedinUrl) || Boolean(l.email), {
+    message: "linkedinUrl or email required",
+  });
 
 export async function GET(req: NextRequest) {
   const user = await requireUser(req, "leads:read");
@@ -40,8 +54,9 @@ export async function GET(req: NextRequest) {
     params.push(status);
   }
   if (q) {
-    sql += " AND (l.full_name LIKE ? OR l.company_name LIKE ? OR l.job_title LIKE ?)";
-    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    sql +=
+      " AND (l.full_name LIKE ? OR l.company_name LIKE ? OR l.job_title LIKE ? OR l.email LIKE ? OR l.linkedin_uid LIKE ?)";
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   sql += " ORDER BY l.updated_at DESC LIMIT ?";
   params.push(limit);

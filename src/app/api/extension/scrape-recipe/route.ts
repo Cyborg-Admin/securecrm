@@ -15,7 +15,7 @@ const putSchema = z.object({
   fields: z.record(
     z.string(),
     z.object({
-      css: z.string().max(500).optional(),
+      css: z.string().max(1000).optional(),
       jsonPath: z.string().max(300).optional(),
       regex: z.string().max(300).optional(),
       attribute: z.string().max(80).optional(),
